@@ -50,3 +50,54 @@ bench, capture only authorized device traffic, record one operation at a time,
 and correlate responses with camera-side observations. Include firmware and
 hardware revisions and independent restoration of each reversible setting.
 Keep original captures private; publish reviewed redacted protocol findings.
+
+## Evidence-gathering methodology
+
+Two techniques are available to observe the official app's own behavior on your
+own hardware. Both only *observe*; neither establishes a working client by
+itself, and neither licenses inferring or bypassing authentication.
+
+### MitM proxy capture (app-to-camera traffic)
+
+Routing the official 70mai app's traffic through a local proxy (e.g. Mitmproxy,
+Charles) while the phone is joined to the camera's own Wi-Fi network can reveal
+the HTTP/RTSP requests the app actually sends: endpoints, ports, headers, and
+framing. Treat anything observed this way as E2 (A810 Lite-specific observation)
+once the camera model/firmware is confirmed, rising to E3 only once a request
+has been replayed independently from this project's own client and produced a
+camera-side effect you independently verified. Capture one operation at a time,
+record hardware/firmware per the template above, and run every exported log
+through `python -m kenpi.tools.redact` before sharing — these captures
+routinely contain session tokens, Wi-Fi credentials, and device identifiers.
+
+### APK review (static analysis of the official app)
+
+Decompiling a production APK you legally obtained (e.g. with `jadx` or
+`apktool`) can reveal endpoint strings, request formats, and constants the app
+uses. Treat findings this way as E1–E2: they show what the app *can* do, not
+what a captured session actually did, and they are never a substitute for a
+captured, reproduced request. Any string, constant, or derivation found this way
+must still be exercised and independently verified on the physical camera
+before it is trusted at E3 or above.
+
+### Authentication is out of scope for this project to construct
+
+If app traffic or static analysis reveals that pairing establishes a per-device
+token or derived secret, that is a legitimate E1/E2 observation to record. This
+project does not implement a token derivation, hash, or other credential
+construction from guesswork, undocumented constants, or secondhand claims never
+exercised here — only a reproduced, verified handshake captured from the actual
+camera may inform `CameraSessionProvider`. `CameraControlService` continues to
+require explicit session validation and E4 evidence before any write is sent;
+nothing here changes that gate.
+
+## Connect-only reachability profiler
+
+`python -m kenpi.tools.profiler --target <private-ip> [--port N ...]` completes a
+TCP handshake per port and closes immediately. It sends no payload, reads no
+banner, and rejects public, multicast and hostname targets. The default ports
+(21, 23, 80, 554) are unverified hypotheses from other 70mai models; an open port
+is E0 reachability data only and proves nothing about A810 Lite behavior. It is
+not a passive sniffer: it does make connections, so run it only against your own
+camera on a bench. The JSON output (`kenpi.profile/1`) can be redacted and kept
+as a fixture once real results exist.

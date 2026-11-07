@@ -124,12 +124,15 @@ class HealthTests(unittest.TestCase):
             meminfo.write_text("MemTotal: 2048 kB\nMemAvailable: 1024 kB\n")
             temperature = root / "temperature"
             temperature.write_text("42500")
+            network = root / "net"
+            network.mkdir()
             health = collect_host_health(
                 meminfo_path=meminfo,
                 storage_path=root,
                 device_tree_paths=(tree,),
                 uptime_path=uptime,
                 cpu_temperature_path=temperature,
+                network_root=network,
             )
         self.assertEqual(health["collection_status"], "complete")
         self.assertEqual(health["collection_errors"], [])

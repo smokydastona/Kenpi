@@ -152,3 +152,59 @@ def collect_platform_health(
             "GPIO, wake and camera power control require verified physical wiring"
         ),
     }
+
+
+def _counter(path: Path, metric: str, errors: list[dict[str, str]]) -> int | None:
+    """Read a non-negative kernel byte/packet counter."""
+    value = _text(path, metric, errors)
+    if value is None:
+        return None
+    try:
+        count = int(value)
+    except ValueError:
+        errors.append({"metric": metric, "reason": "invalid_reading"})
+        return None
+    if count < 0:
+        errors.append({"metric": metric, "reason": "out_of_range"})
+        return None
+    return count
+
+
+def collect_network_health(
+    *, network_root: Path = Path("/sys/class/net")
+) -> dict[str, Any]:
+    """Report real link state and traffic counters for non-loopback interfaces.
+
+    Only kernel-reported operational state and byte/packet counters are
+    returned. Hardware (MAC) addresses are never read or exposed, since they
+    are a device identifier that does not need to leave the host for local
+    diagnostics.
+    """
+    errors: list[dict[str, str]] = []
+    interfaces: list[dict[str, Any]] = []
+    try:
+        entries = sorted(
+            (entry for entry in network_root.iterdir() if entry.name != "lo"),
+            key=lambda entry: entry.name,
+        )
+    except OSError as error:
+        errors.append(
+            {"metric": "network_interfaces", "reason": collection_error_reason(error)}
+        )
+        return {"interfaces": [], "collection_errors": errors}
+
+    for entry in entries:
+        name = entry.name
+        operstate = _text(entry / "operstate", f"network.{name}.operstate", errors)
+        statistics = entry / "statistics"
+        rx_bytes = _counter(statistics / "rx_bytes", f"network.{name}.rx_bytes", errors)
+        tx_bytes = _counter(statistics / "tx_bytes", f"network.{name}.tx_bytes", errors)
+        interfaces.append(
+            {
+                "name": name,
+                "operstate": operstate,
+                "rx_bytes": rx_bytes,
+                "tx_bytes": tx_bytes,
+            }
+        )
+    return {"interfaces": interfaces, "collection_errors": errors}

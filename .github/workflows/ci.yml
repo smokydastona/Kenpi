@@ -28,3 +28,52 @@ jobs:
         run: python -m compileall -q kenpi tests
       - name: Unit tests
         run: python -m unittest discover -v
+      - name: Build wheel
+        run: python -m pip wheel --no-deps --wheel-dir /tmp/kenpi-wheels .
+
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck deployment and OS image scripts
+        run: |
+          shellcheck \
+            deploy/install-status.sh \
+            deploy/rollback-status.sh \
+            os-image/build.sh \
+            os-image/stage-kenpi/00-install-kenpi/01-run.sh \
+            os-image/stage-kenpi/00-install-kenpi/02-run-chroot.sh
+
+  systemd-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify kenpi-status.service
+        run: |
+          # systemd-analyze verify also checks that ExecStart's binary exists on disk.
+          # That path only exists on a deployed host, so stand in a placeholder here
+          # purely to exercise unit-file syntax, dependency, and sandboxing directive
+          # checks; this does not validate kenpi's own runtime behavior.
+          sudo mkdir -p /opt/kenpi/current/venv/bin
+          printf '#!/bin/sh\nexit 0\n' | sudo tee /opt/kenpi/current/venv/bin/python > /dev/null
+          sudo chmod +x /opt/kenpi/current/venv/bin/python
+          systemd-analyze verify ./deploy/kenpi-status.service
+
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run native firmware unit tests
+        run: firmware/tools/run_native_tests.sh
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Run Android unit tests
+        working-directory: android
+        run: ./gradlew testDebugUnitTest --stacktrace

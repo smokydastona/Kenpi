@@ -114,6 +114,31 @@ class CoordinatorTests(unittest.IsolatedAsyncioTestCase):
         await coordinator.stop()
         self.assertEqual(events, ["start:api", "stop:api"] * 2)
 
+    async def test_describe_reports_configured_and_started_services(self) -> None:
+        events: list[str] = []
+        coordinator = ServiceCoordinator(
+            (RecordingService("camera", events), RecordingService("api", events))
+        )
+        before = coordinator.describe()
+        self.assertEqual(before["configured_service_count"], 2)
+        self.assertEqual(
+            before["configured_services"], ["RecordingService", "RecordingService"]
+        )
+        self.assertEqual(before["started_service_count"], 0)
+        self.assertFalse(before["is_running"])
+
+        await coordinator.start()
+        running = coordinator.describe()
+        self.assertEqual(running["started_service_count"], 2)
+        self.assertTrue(running["is_running"])
+
+        await coordinator.stop()
+        stopped = coordinator.describe()
+        self.assertEqual(stopped["started_service_count"], 0)
+        self.assertFalse(stopped["is_running"])
+        # Configured services never change, regardless of start/stop state.
+        self.assertEqual(stopped["configured_services"], before["configured_services"])
+
 
 if __name__ == "__main__":
     unittest.main()

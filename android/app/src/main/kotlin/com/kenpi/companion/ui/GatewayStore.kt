@@ -24,6 +24,7 @@ data class GatewayUiState(
     val snapshot: GatewaySnapshot? = null,
     val error: String? = null,
     val lastUpdated: String? = null,
+    val lastUpdatedAtMillis: Long? = null,
 )
 
 sealed interface GatewayIntent {
@@ -34,11 +35,14 @@ sealed interface GatewayIntent {
 }
 
 class GatewayStore(
+    initialBaseUrl: String = "",
     private val fetchSnapshot: suspend (String) -> GatewaySnapshot = GatewayClient()::fetchSnapshot,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+    private val persistBaseUrl: (String) -> Unit = {},
+    private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
     private val refreshMutex = Mutex()
-    private val mutableState = MutableStateFlow(GatewayUiState())
+    private val mutableState = MutableStateFlow(GatewayUiState(baseUrl = initialBaseUrl))
     val state = mutableState.asStateFlow()
 
     private var monitoringJob: Job? = null
@@ -51,6 +55,7 @@ class GatewayStore(
                     stopMonitoring()
                     urlRevision++
                     mutableState.value = GatewayUiState(baseUrl = intent.value)
+                    persistBaseUrl(intent.value)
                 }
             }
 
@@ -95,7 +100,9 @@ class GatewayStore(
             val normalizedUrl = try {
                 GatewayClient.normalizeBaseUrl(requestedUrl)
             } catch (error: IllegalArgumentException) {
-                mutableState.update { it.copy(snapshot = null, lastUpdated = null, error = error.message) }
+                mutableState.update {
+                    it.copy(snapshot = null, lastUpdated = null, lastUpdatedAtMillis = null, error = error.message)
+                }
                 return
             }
 
@@ -108,6 +115,7 @@ class GatewayStore(
                             snapshot = snapshot,
                             error = null,
                             lastUpdated = Instant.now().toString(),
+                            lastUpdatedAtMillis = nowMillis(),
                         )
                     } else {
                         current
@@ -121,6 +129,7 @@ class GatewayStore(
                         current.copy(
                             snapshot = null,
                             lastUpdated = null,
+                            lastUpdatedAtMillis = null,
                             error = error.message ?: "Unable to reach the gateway.",
                         )
                     } else {
@@ -138,4 +147,18 @@ class GatewayStore(
     private companion object {
         const val POLL_INTERVAL_MILLIS = 2_000L
     }
+}
+
+/**
+ * Threshold after which the most recent successful refresh is considered stale, even while
+ * polling is still active (e.g. the gateway stopped responding but the poll loop keeps retrying).
+ * Exposed separately from [GatewayStore] so the UI and tests can reason about staleness without
+ * depending on store internals.
+ */
+const val STALE_DATA_THRESHOLD_MILLIS = 6_000L
+
+/** True when the last successful snapshot is older than [STALE_DATA_THRESHOLD_MILLIS], or absent. */
+fun isSnapshotStale(nowMillis: Long, lastUpdatedAtMillis: Long?): Boolean {
+    if (lastUpdatedAtMillis == null) return false
+    return nowMillis - lastUpdatedAtMillis > STALE_DATA_THRESHOLD_MILLIS
 }

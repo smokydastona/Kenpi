@@ -5,23 +5,83 @@
   color: #eef4f7;
 }
 
-body { margin: 0 auto; max-width: 960px; padding: 1rem; }
+body {
+  margin: 0 auto;
+  max-width: 960px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
 header, main, footer { padding: 1rem; }
+header { padding-bottom: .5rem; }
 h1 { margin: 0; font-size: 1.5rem; }
+h2 { margin-top: 0; }
 .subtle { color: #b7c8d1; }
-#status { border: 1px solid #536775; border-radius: .75rem; padding: .8rem 1rem; }
-#capabilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .75rem; }
-article { border: 1px solid #536775; border-radius: .75rem; padding: 1rem; min-height: 7rem; }
-article h2 { font-size: 1.1rem; margin: 0 0 .4rem; }
+
+#status {
+  margin: 0 1rem;
+  border: 1px solid #536775;
+  border-radius: .75rem;
+  padding: .8rem 1rem;
+}
+#status.stale { border-color: #ffbf69; color: #ffbf69; }
+
+main { flex: 1 1 auto; }
+
+.screen[hidden] { display: none; }
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+
+.capability-card {
+  border: 1px solid #536775;
+  border-radius: .75rem;
+  padding: 1rem;
+  min-height: 7rem;
+}
+.capability-card h4 { font-size: 1.1rem; margin: 0 0 .4rem; }
+
+.preview-frame { margin-bottom: 1rem; }
+
 .state { font-weight: 700; text-transform: uppercase; }
 .blocked, .unsupported { color: #ffbf69; }
 .not_verified { color: #ffd166; }
 .available { color: #8ee3a1; }
+
 dl { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
 dd { margin: 0; overflow-wrap: anywhere; }
 a { color: #9bd5ff; }
 
+#tabs {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  background: #16202a;
+  border-top: 1px solid #536775;
+}
+.tab {
+  flex: 1 1 0;
+  min-height: 56px;
+  border: none;
+  background: transparent;
+  color: #eef4f7;
+  font: inherit;
+  cursor: pointer;
+}
+.tab.active {
+  background: #253542;
+  font-weight: 700;
+  border-top: 3px solid #9bd5ff;
+}
+.tab:focus-visible { outline: 2px solid #9bd5ff; outline-offset: -2px; }
+
 @media (max-width: 480px) {
-  body { padding: .25rem; }
   header, main, footer { padding: .75rem; }
+  .tab { min-height: 64px; font-size: .95rem; }
 }

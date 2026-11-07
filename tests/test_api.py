@@ -8,6 +8,17 @@ from urllib.request import ProxyHandler, build_opener, urlopen
 from kenpi.api.app import KenpiApiService
 
 
+def _ipv6_loopback_usable() -> bool:
+    if not socket.has_ipv6:
+        return False
+    try:
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as probe:
+            probe.bind(("::1", 0))
+    except OSError:
+        return False
+    return True
+
+
 class ApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_shutdown_closes_idle_clients(self) -> None:
         service = KenpiApiService(port=0)
@@ -62,7 +73,7 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
                 connection.close()
             await service.stop()
 
-    @unittest.skipUnless(socket.has_ipv6, "IPv6 is unavailable on this host")
+    @unittest.skipUnless(_ipv6_loopback_usable(), "IPv6 loopback is unavailable")
     async def test_ipv6_loopback_status_and_restart(self) -> None:
         service = KenpiApiService(
             host="::1", port=0, health_check=lambda: {"application_status": "ok"}
@@ -126,17 +137,77 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(
                 "script-src 'self'", dashboard.headers["Content-Security-Policy"]
             )
-            self.assertIn(b"Loading current service capabilities", dashboard.read())
+            dashboard_body = dashboard.read()
+            self.assertIn(b"Loading current service capabilities", dashboard_body)
+            for screen in (b"main", b"camera", b"media", b"system", b"vehicle"):
+                self.assertIn(b'data-screen="' + screen + b'"', dashboard_body)
+                self.assertIn(b'data-target="' + screen + b'"', dashboard_body)
             stylesheet = await asyncio.to_thread(
                 urlopen, f"{base_url}/static/dashboard.css"
             )
             self.assertIn(b"color-scheme", stylesheet.read())
             script = await asyncio.to_thread(urlopen, f"{base_url}/static/dashboard.js")
-            self.assertIn(b"/api/v1/capabilities", script.read())
+            script_body = script.read()
+            self.assertIn(b"/api/v1/capabilities", script_body)
+            self.assertIn(b"renderVehicleScreen", script_body)
 
             with self.assertRaises(HTTPError) as error:
                 await asyncio.to_thread(urlopen, f"{base_url}/missing")
             self.assertEqual(error.exception.code, 404)
+        finally:
+            await service.stop()
+
+    async def test_status_route_reports_version_uptime_and_coordinator_state(
+        self,
+    ) -> None:
+        service = KenpiApiService(
+            port=0,
+            status_provider=lambda: {"is_running": True, "started_service_count": 1},
+        )
+        await service.start()
+        try:
+            response = await asyncio.to_thread(
+                urlopen, f"http://127.0.0.1:{service.bound_port}/api/v1/status"
+            )
+            payload = json.loads(response.read())
+            self.assertIn("version", payload)
+            self.assertIsInstance(payload["uptime_seconds"], (int, float))
+            self.assertGreaterEqual(payload["uptime_seconds"], 0)
+            self.assertIn("started_at", payload)
+            self.assertEqual(
+                payload["coordinator"],
+                {"is_running": True, "started_service_count": 1},
+            )
+        finally:
+            await service.stop()
+
+    async def test_status_route_without_status_provider_omits_coordinator(self) -> None:
+        service = KenpiApiService(port=0)
+        await service.start()
+        try:
+            response = await asyncio.to_thread(
+                urlopen, f"http://127.0.0.1:{service.bound_port}/api/v1/status"
+            )
+            payload = json.loads(response.read())
+            self.assertNotIn("coordinator", payload)
+        finally:
+            await service.stop()
+
+    async def test_status_route_reports_collection_failure_without_crashing(
+        self,
+    ) -> None:
+        def broken_status() -> dict[str, object]:
+            raise RuntimeError("coordinator unavailable")
+
+        service = KenpiApiService(port=0, status_provider=broken_status)
+        await service.start()
+        try:
+            response = await asyncio.to_thread(
+                urlopen, f"http://127.0.0.1:{service.bound_port}/api/v1/status"
+            )
+            payload = json.loads(response.read())
+            self.assertIsNone(payload["coordinator"])
+            self.assertEqual(payload["coordinator_error"], "status collection failed")
         finally:
             await service.stop()
 

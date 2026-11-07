@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.metadata
 import ipaddress
 import json
 import logging
 import socket
 import threading
+import time
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from typing import Callable
@@ -16,6 +19,11 @@ from kenpi.core.capabilities import Capability, INITIAL_CAPABILITIES
 from kenpi.services.health import collect_host_health
 
 logger = logging.getLogger(__name__)
+
+try:
+    _KENPI_VERSION = importlib.metadata.version("kenpi")
+except importlib.metadata.PackageNotFoundError:
+    _KENPI_VERSION = "unknown"
 
 
 def capability_payload(capabilities: tuple[Capability, ...]) -> dict[str, object]:
@@ -41,6 +49,7 @@ class KenpiApiService:
         port: int = 8080,
         capabilities: tuple[Capability, ...] = INITIAL_CAPABILITIES,
         health_check: Callable[[], dict[str, object]] | None = None,
+        status_provider: Callable[[], dict[str, object]] | None = None,
     ) -> None:
         try:
             address = ipaddress.ip_address(host)
@@ -54,6 +63,7 @@ class KenpiApiService:
         self._port = port
         self._capabilities = capabilities
         self._health_check = health_check or collect_host_health
+        self._status_provider = status_provider
         self._server: ThreadingHTTPServer | None = None
         self._server_task: asyncio.Task[None] | None = None
 
@@ -68,6 +78,25 @@ class KenpiApiService:
             raise RuntimeError("API is already running")
         capabilities = self._capabilities
         health_check = self._health_check
+        status_provider = self._status_provider
+        started_at_monotonic = time.monotonic()
+        started_at_iso = datetime.now(timezone.utc).isoformat()
+
+        def build_status_payload() -> dict[str, object]:
+            payload: dict[str, object] = {
+                "version": _KENPI_VERSION,
+                "started_at": started_at_iso,
+                "uptime_seconds": time.monotonic() - started_at_monotonic,
+            }
+            if status_provider is not None:
+                try:
+                    payload["coordinator"] = status_provider()
+                except Exception:
+                    logger.warning("Coordinator status collection failed")
+                    payload["coordinator"] = None
+                    payload["coordinator_error"] = "status collection failed"
+            return payload
+
         assets = {
             "/": ("index.html", "text/html; charset=utf-8"),
             "/static/dashboard.css": ("dashboard.css", "text/css; charset=utf-8"),
@@ -101,6 +130,8 @@ class KenpiApiService:
                         self._send(200, body, "application/json; charset=utf-8")
                 elif self.path == "/api/v1/capabilities":
                     self._send_json(200, capability_payload(capabilities))
+                elif self.path == "/api/v1/status":
+                    self._send_json(200, build_status_payload())
                 else:
                     self._send_json(404, {"error": "not_found"})
 

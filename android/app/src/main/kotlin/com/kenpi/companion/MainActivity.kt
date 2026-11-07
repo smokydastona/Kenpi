@@ -3,6 +3,7 @@ package com.kenpi.companion
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,8 +23,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,9 +36,12 @@ import com.kenpi.companion.network.GatewayCapability
 import com.kenpi.companion.ui.GatewayIntent
 import com.kenpi.companion.ui.GatewayStore
 import com.kenpi.companion.ui.GatewayUiState
+import com.kenpi.companion.ui.GatewayViewModel
+import com.kenpi.companion.ui.isSnapshotStale
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
-    private val store = GatewayStore()
+    private val viewModel: GatewayViewModel by viewModels { GatewayViewModel.factory(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,20 +51,20 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    GatewayScreen(store)
+                    GatewayScreen(viewModel.store)
                 }
             }
         }
     }
 
     override fun onStop() {
-        store.accept(GatewayIntent.StopMonitoring)
+        // Pause polling when the app is actually backgrounded, but not merely because the
+        // Activity is being torn down and recreated for a configuration change (e.g. rotation),
+        // in which case the GatewayViewModel (and its GatewayStore) survives unchanged.
+        if (!isChangingConfigurations) {
+            viewModel.store.accept(GatewayIntent.StopMonitoring)
+        }
         super.onStop()
-    }
-
-    override fun onDestroy() {
-        store.close()
-        super.onDestroy()
     }
 }
 
@@ -136,6 +144,19 @@ private fun GatewayScreen(store: GatewayStore) {
 @Composable
 private fun GatewayStatus(state: GatewayUiState) {
     val snapshot = state.snapshot
+
+    // Ticks once a second so the staleness check below re-evaluates even when no new data
+    // arrives (e.g. the gateway stopped responding while polling keeps retrying in the
+    // background).
+    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1_000)
+            nowMillis = System.currentTimeMillis()
+        }
+    }
+    val isStale = isSnapshotStale(nowMillis, state.lastUpdatedAtMillis)
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -146,6 +167,12 @@ private fun GatewayStatus(state: GatewayUiState) {
             Text(if (state.isMonitoring) "Monitoring: active (2 s polling)" else "Monitoring: stopped")
             Text("Realtime updates: unavailable (HTTP polling)")
             state.lastUpdated?.let { Text("Last updated: $it") }
+            if (isStale) {
+                Text(
+                    text = "⚠ Data may be stale: no successful refresh recently.",
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             snapshot?.healthDetails?.forEach { (label, value) ->
                 Text("$label: $value")
             }
