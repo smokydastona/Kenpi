@@ -50,3 +50,14 @@ bench, capture only authorized device traffic, record one operation at a time,
 and correlate responses with camera-side observations. Include firmware and
 hardware revisions and independent restoration of each reversible setting.
 Keep original captures private; publish reviewed redacted protocol findings.
+
+## Connect-only reachability profiler
+
+`python -m kenpi.tools.profiler --target <private-ip> [--port N ...]` completes a
+TCP handshake per port and closes immediately. It sends no payload, reads no
+banner, and rejects public, multicast and hostname targets. The default ports
+(21, 23, 80, 554) are unverified hypotheses from other 70mai models; an open port
+is E0 reachability data only and proves nothing about A810 Lite behavior. It is
+not a passive sniffer: it does make connections, so run it only against your own
+camera on a bench. The JSON output (`kenpi.profile/1`) can be redacted and kept
+as a fixture once real results exist.
