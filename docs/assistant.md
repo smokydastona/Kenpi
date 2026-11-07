@@ -265,3 +265,12 @@ when its tool or device is missing; text-only operation is unaffected.
 Not done: no systemd listener service is wired up yet, playback (`aplay`) is not implemented, the
 wake word is matched on whisper transcripts (not a dedicated low-power detector), and nothing was
 tested against a real microphone or real whisper.cpp model.
+
+## Remediation workflow
+
+A `RemediationAction` may declare a `precondition` (blocks execution with a reason), a `timeout`,
+a `verify` check and a `rollback`. Execution order: permission/approval gate → precondition →
+handler (worker thread, timeout) → verification → rollback on failure. Results record `verified`
+and `rolled_back`, and the engine writes each to the diagnostic history. Existing actions
+declare none of these yet, so they run unverified; add them per action when the real operation is
+defined.
