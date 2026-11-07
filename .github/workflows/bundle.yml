@@ -17,12 +17,12 @@ concurrency:
 
 jobs:
   version:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.v.outputs.version }}
       count: ${{ steps.v.outputs.count }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - id: v
@@ -33,15 +33,15 @@ jobs:
 
   python:
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: python -m kenpi.tools.release stamp "${{ needs.version.outputs.version }}"
       - run: python -m pip wheel --no-deps --wheel-dir out .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: component-python
           path: out/*.whl
@@ -49,10 +49,10 @@ jobs:
 
   firmware:
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: python -m pip install platformio
@@ -66,7 +66,7 @@ jobs:
           for f in bootloader partitions; do
             [ -f firmware/.pio/build/esp32s3/$f.bin ] && cp firmware/.pio/build/esp32s3/$f.bin out/
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: component-firmware
           path: out/*
@@ -74,10 +74,10 @@ jobs:
 
   android:
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -91,7 +91,7 @@ jobs:
         run: |
           mkdir out
           cp android/app/build/outputs/apk/debug/*.apk out/kenpi-companion-${{ needs.version.outputs.version }}.apk
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: component-android
           path: out/*.apk
@@ -99,10 +99,10 @@ jobs:
 
   os-image:
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Free disk space
@@ -123,7 +123,7 @@ jobs:
           sudo chown -R "$USER" out
           for f in out/*.img; do xz -T0 "$f"; done
           ls -lh out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: component-os-image
           path: out/*
@@ -132,14 +132,14 @@ jobs:
   bundle:
     needs: [version, python, firmware, android, os-image]
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Fetch component artifacts that were built
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: component-*
           path: parts
@@ -160,7 +160,7 @@ jobs:
       - name: Unpack so the artifact download is one zip
         if: ${{ always() && hashFiles('dist/*.zip') != '' }}
         run: unzip -q dist/kenpi-*.zip -d "bundle"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: ${{ always() && hashFiles('dist/*.zip') != '' }}
         with:
           name: kenpi-${{ needs.version.outputs.version }}
