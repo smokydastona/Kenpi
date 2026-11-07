@@ -60,3 +60,11 @@ Python gateway. JDK 27 fails with Gradle 8.9; use JDK 17.
 Not verified: the `:app` module (Compose UI, `AppModel`, Keystore, `MainActivity`). It needs the
 Android Gradle Plugin from Google's Maven repository (`dl.google.com`), which was unreachable
 from this host, so the app has not been compiled, instrumented or packaged as an APK.
+
+## CI
+
+`.github/workflows/android.yml` runs on a runner with network access to Google's Maven: unit and
+interop tests, lint, debug and release APK builds with SHA-256 checksums (uploaded as artifacts),
+and an emulator job that installs the debug APK, launches `MainActivity` and fails on a crash.
+The release APK is unsigned (no signing config exists) and is not installable as is. The workflow
+has not yet been run; its first run is the first real verification of the `:app` module.
