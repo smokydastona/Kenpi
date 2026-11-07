@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -61,6 +64,7 @@ class Orchestrator:
         conversations: ConversationStore | None = None,
     ) -> None:
         self.conversations = conversations or ConversationStore()
+        self.history: deque[dict[str, Any]] = deque(maxlen=200)
         self.approvals = approvals or ApprovalStore()
         self._character = character
         self._registry = registry
@@ -166,11 +170,50 @@ class Orchestrator:
                 needs_approval=decision.needs_approval,
                 approval_id=approval_id,
             )
-        try:
-            return Outcome(name, True, decision.reason, tool.handler(args))
-        except Exception as error:
-            logger.warning("Tool %s failed: %s", name, type(error).__name__)
-            return Outcome(name, False, f"tool failed: {type(error).__name__}")
+        started = time.monotonic()
+        outcome = self._run(tool, args, decision.reason)
+        self.history.append(
+            {
+                "tool": name,
+                "arg_names": sorted(args),
+                "session": session_id,
+                "executed": outcome.executed,
+                "reason": outcome.reason,
+                "seconds": round(time.monotonic() - started, 3),
+                "at": time.time(),
+            }
+        )
+        return outcome
+
+    @staticmethod
+    def _run(tool: Any, args: dict[str, Any], reason: str) -> Outcome:
+        """Run a handler in a worker thread so a hung tool cannot block the assistant."""
+        box: dict[str, Any] = {}
+
+        def work() -> None:
+            try:
+                box["result"] = tool.handler(args)
+            except Exception as error:
+                box["error"] = type(error).__name__
+
+        worker = threading.Thread(target=work, name=f"tool-{tool.name}", daemon=True)
+        worker.start()
+        worker.join(tool.timeout)
+        if worker.is_alive():
+            logger.warning("Tool %s timed out after %ss", tool.name, tool.timeout)
+            return Outcome(tool.name, False, f"tool timed out after {tool.timeout:g}s")
+        if "error" in box:
+            logger.warning("Tool %s failed: %s", tool.name, box["error"])
+            return Outcome(tool.name, False, f"tool failed: {box['error']}")
+        result = box["result"]
+        if tool.verify is not None:
+            try:
+                problem = tool.verify(result)
+            except Exception as error:
+                problem = f"verification error: {type(error).__name__}"
+            if problem:
+                return Outcome(tool.name, False, f"verification failed: {problem}")
+        return Outcome(tool.name, True, reason, result)
 
     @staticmethod
     def _refusal(outcome: Outcome) -> str:

@@ -238,3 +238,11 @@ phone logs uploaded by the companion. `gateway`, `firmware`, `voice` and `networ
 but have no automatic collector yet. Phone (`android`) records are searchable but flagged untrusted and are
 excluded from the fault analyzer, so a phone cannot create a Kenpi fault by sending crafted lines. Ask
 "search the logs for <text>" (read-only `search_logs` tool).
+
+## Tool execution safeguards
+
+Each tool runs in a worker thread with a per-tool timeout (default 10 s); a hung tool yields a
+failed outcome instead of blocking the assistant. An optional `verify` callback checks the result,
+and a failed check is reported as a failure, not success. `Orchestrator.history` keeps the last 200
+executions (tool, argument names only, outcome, duration) in memory. A timed-out thread cannot be
+force-killed in Python; it is a daemon thread and its result is discarded.

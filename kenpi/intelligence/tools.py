@@ -21,6 +21,10 @@ class Tool:
     handler: ToolHandler
     args: dict[str, type] | None = None  # allowed argument names and types
     gate: Callable[[], str | None] | None = None  # returns a denial reason, or None
+    timeout: float = 10.0
+    verify: Callable[[dict[str, Any]], str | None] | None = (
+        None  # failure reason, or None
+    )
 
     def describe(self) -> dict[str, Any]:
         return {
