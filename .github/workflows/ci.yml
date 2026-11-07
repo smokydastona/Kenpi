@@ -80,12 +80,14 @@ jobs:
           python-version: "3.12"
       - name: Install gateway for interop tests
         run: python -m pip install . cryptography
-      - name: Run Android and core tests (core talks to the real Python gateway)
+      - name: Run core tests (Kotlin client against the real Python gateway)
         working-directory: android
         env:
+          KENPI_CORE_ONLY: "1"
           KENPI_INTEROP_PYTHON: python
           KENPI_INTEROP_ROOT: ${{ github.workspace }}
-        run: ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --stacktrace
+        run: ./gradlew :core:test --stacktrace
+      # The app module (tests, lint, APKs, emulator smoke test) is built by android.yml.
 
   live-integration:
     runs-on: ubuntu-latest
