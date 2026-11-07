@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.coverage
+dist/
+build/
+captures/*
+!captures/README.md
+config/kenpi.yaml
+*.log

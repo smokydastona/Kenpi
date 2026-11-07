@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools==78.1.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kenpi"
+version = "0.1.0"
+description = "A safety-first service foundation for the Kenpi camera gateway"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+readme = "README.md"
+
+[tool.setuptools.packages.find]
+include = ["kenpi*"]
+
+[tool.unittest]
+start-directory = "tests"
