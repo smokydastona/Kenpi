@@ -172,6 +172,20 @@ _ISSUES = (
         ("slow", "cpu", "load", "lag"),
     ),
     KnownIssue(
+        "host.fs_readonly",
+        "Filesystem is read-only",
+        "A real filesystem is mounted read-only; Linux does this after I/O errors.",
+        (
+            Step(
+                "Look for 'I/O error' or 'remounting filesystem read-only' in the kernel log (journalctl -k)."
+            ),
+            Step(
+                "Suspect the SD card or SSD and its power supply; back up before any repair or reboot."
+            ),
+        ),
+        ("read-only", "readonly", "sd card", "corrupt", "i/o error"),
+    ),
+    KnownIssue(
         "network.cert_expiring",
         "Gateway certificate expiring",
         "The gateway certificate is expired or has under 30 days left. Re-issuing it changes the pinned fingerprint, so phones must re-pair.",

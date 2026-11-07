@@ -285,3 +285,10 @@ Settings in `assistant.toml`: `whisper_binary`, `whisper_model`, `wake_words`,
 `audio_device`. Without arecord/whisper/model it exits with a clear message;
 text-only use is unaffected. Tested with real subprocess stand-ins only; it has
 not been run against a real microphone, whisper model or speaker.
+
+### Filesystem check
+
+The `filesystem` check reads `/proc/mounts` and reports `host.fs_readonly` when a
+real filesystem (ext4, vfat, f2fs, …) is mounted read-only, which Linux does
+after I/O errors. An unreadable mount table is `unknown`. The cause (SD card,
+power) still needs the kernel log; Kenpi proposes no automatic repair.

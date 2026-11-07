@@ -169,6 +169,7 @@ class DiagnosticsTests(unittest.TestCase):
             "swap_used_bytes": 0,
             "throttled_flags": 0,
             "usb_devices": [],
+            "readonly_mounts": [],
         }
         with unittest.mock.patch("kenpi.assistant.collect_system", lambda: healthy):
             report = make_assistant().diagnostics.run()

@@ -50,6 +50,24 @@ def read_throttled(
         return None
 
 
+REAL_FILESYSTEMS = {"ext4", "ext3", "ext2", "vfat", "f2fs", "xfs", "btrfs", "exfat"}
+
+
+def readonly_mounts(mounts_text: str) -> list[str]:
+    """Mount points of real filesystems that are mounted read-only.
+
+    The kernel remounts ext4 read-only after I/O errors, so this is evidence
+    of a filesystem fault (the cause still needs the kernel log).
+    """
+    found = []
+    for line in mounts_text.splitlines():
+        parts = line.split()
+        if len(parts) >= 4 and parts[2] in REAL_FILESYSTEMS:
+            if "ro" in parts[3].split(","):
+                found.append(parts[1])
+    return sorted(found)
+
+
 def collect_system(
     proc_root: Path = Path("/proc"),
     sys_root: Path = Path("/sys"),
@@ -57,6 +75,7 @@ def collect_system(
     cpu_count: int | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
+        "readonly_mounts": None,
         "load_1m": None,
         "cpu_count": cpu_count or os.cpu_count(),
         "swap_total_bytes": None,
@@ -80,6 +99,9 @@ def collect_system(
     if len(values) == 2:
         result["swap_total_bytes"] = values["SwapTotal"]
         result["swap_used_bytes"] = values["SwapTotal"] - values["SwapFree"]
+    mounts = _read(proc_root / "mounts")
+    if mounts is not None:
+        result["readonly_mounts"] = readonly_mounts(mounts)
     result["throttled_flags"] = read_throttled(sys_root, vcgencmd)
     usb = sys_root / "bus/usb/devices"
     try:

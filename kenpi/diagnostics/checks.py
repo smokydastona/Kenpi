@@ -424,6 +424,21 @@ def check_system(context: DiagnosticContext) -> list[CheckResult]:
                 {"flags": hex(flags)},
             )
         )
+    ro = data.get("readonly_mounts")
+    if ro is None:
+        results.append(_unknown(Subsystem.HOST, "filesystem", "mount table unreadable"))
+    else:
+        results.append(
+            CheckResult(
+                Subsystem.HOST,
+                "filesystem",
+                Status.FAIL if ro else Status.OK,
+                "read-only filesystem(s): " + ", ".join(ro)
+                if ro
+                else "all real filesystems are writable",
+                {"readonly": ro},
+            )
+        )
     usb = data.get("usb_devices")
     results.append(
         _unknown(Subsystem.HOST, "usb", "USB bus not readable")

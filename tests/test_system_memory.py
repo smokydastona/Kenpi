@@ -149,3 +149,33 @@ class ListenCommandTests(unittest.TestCase):
                 code = main(["--state-directory", d, "listen"])
         self.assertEqual(code, 1)
         self.assertIn("unavailable", err.getvalue())
+
+
+class FilesystemTests(unittest.TestCase):
+    def test_readonly_mounts_and_check(self) -> None:
+        from kenpi.diagnostics.checks import DiagnosticContext, check_system
+        from kenpi.diagnostics.models import Status
+        from kenpi.diagnostics.system import readonly_mounts
+
+        text = (
+            "/dev/mmcblk0p2 / ext4 ro,relatime 0 0\n"
+            "/dev/mmcblk0p1 /boot/firmware vfat rw,relatime 0 0\n"
+            "proc /proc proc ro 0 0\n"
+        )
+        self.assertEqual(readonly_mounts(text), ["/"])
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "mounts").write_text(text)
+            data = collect_system(root, root / "sys", ("false",), 2)
+        self.assertEqual(data["readonly_mounts"], ["/"])
+        results = check_system(DiagnosticContext(system=lambda: data))
+        fs = next(r for r in results if r.name == "filesystem")
+        self.assertEqual(fs.status, Status.FAIL)
+        with tempfile.TemporaryDirectory() as d:
+            data = collect_system(Path(d), Path(d), ("false",), 2)
+        fs = next(
+            r
+            for r in check_system(DiagnosticContext(system=lambda: data))
+            if r.name == "filesystem"
+        )
+        self.assertEqual(fs.status, Status.UNKNOWN)

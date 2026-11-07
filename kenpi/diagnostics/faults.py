@@ -49,6 +49,12 @@ def detect_faults(results: list[CheckResult], logs: LogAnalysis | None) -> list[
         "The Raspberry Pi CPU is overloaded",
     )
     from_check(
+        Subsystem.HOST,
+        "filesystem",
+        "host.fs_readonly",
+        "A filesystem on the Pi is read-only",
+    )
+    from_check(
         Subsystem.NETWORK,
         "tls_certificate",
         "network.cert_expiring",
