@@ -23,6 +23,7 @@ from kenpi.diagnostics.models import DiagnosticContext, Status
 from kenpi.diagnostics.remediation import RemediationAction, RemediationRegistry
 from kenpi.intelligence.memory import PreferenceMemory, SessionStore
 from kenpi.intelligence.orchestrator import Orchestrator
+from kenpi.intelligence.provider import ChatCompletionsProvider
 from kenpi.intelligence.planner import Planner
 from kenpi.intelligence.tools import PolicyEngine, Tool, ToolRegistry
 from kenpi.media.library import LocalMediaLibrary
@@ -76,6 +77,11 @@ class AssistantSettings:
     openvoice_url: str = ""
     openvoice_allow_remote: bool = False
     chatterbox_url: str = ""
+    llm_url: str = ""
+    llm_model: str = ""
+    llm_timeout_seconds: float = 8.0
+    llm_allow_remote: bool = False
+    llm_api_key: str = ""
 
     @classmethod
     def load(cls, path: Path) -> "AssistantSettings":
@@ -179,9 +185,10 @@ class AssistantService:
         )
         self.tools = ToolRegistry()
         self._register_tools(host_health, evidence, media_library)
+        self.model_provider = self._build_provider(settings)
         self.orchestrator = Orchestrator(
             self.tools,
-            Planner(self.tools),
+            Planner(self.tools, self.model_provider),
             PolicyEngine(),
             SessionStore(),
             events,
@@ -262,6 +269,22 @@ class AssistantService:
 
     def speak(self, text: str):
         return self.voice.speak(text, self.character.id)
+
+    @staticmethod
+    def _build_provider(settings: AssistantSettings) -> ChatCompletionsProvider | None:
+        if not settings.llm_url:
+            return None
+        try:
+            return ChatCompletionsProvider(
+                settings.llm_url,
+                settings.llm_model,
+                settings.llm_timeout_seconds,
+                settings.llm_allow_remote,
+                settings.llm_api_key,
+            )
+        except ValueError as error:
+            logger.warning("Model provider disabled: %s", error)
+            return None
 
     def setup_steps(self) -> list[tuple[str, bool | None, str]]:
         """(id, done, instruction). None means it cannot be verified from here."""

@@ -207,3 +207,23 @@ offline `LocalHelper` for connection problems when Kenpi cannot be reached.
 
 Limits: the phone app has text chat only (no phone-side speech); Kotlin changes were written
 without an Android toolchain and are **uncompiled and untested**.
+
+## Model provider (optional)
+
+Deterministic rules always run first. For requests no rule matches, an optional model may *propose*
+tool calls. Configure any OpenAI-compatible endpoint (llama.cpp server, Ollama, vLLM) in `assistant.toml`:
+
+```
+llm_url = "http://127.0.0.1:8080"
+llm_model = "your-model"
+llm_timeout_seconds = 8
+```
+
+A non-loopback host needs `llm_allow_remote = true` and `https`. The model sees only tool names,
+descriptions and argument names, and the user text (capped at 500 chars, marked untrusted). Its
+output is JSON-parsed, unknown tools and invalid arguments are dropped, and every surviving step still
+passes the permission policy and single-use approvals; the model cannot approve anything. Any
+timeout, error or malformed reply falls back to the rule-based answer.
+
+Tested against a real local HTTP server speaking the chat-completions protocol, not against an actual
+language model: model quality, latency on a Pi 5 and multi-turn history are **not** evaluated or implemented.
