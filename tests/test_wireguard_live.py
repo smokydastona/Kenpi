@@ -39,6 +39,14 @@ def sh(*cmd, ns=None, check=True, env=None, timeout=60, **kw):
         env={**os.environ, **(env or {})}, cwd=REPO, **kw,
     )  # fmt: skip
     if check and result.returncode:
+        diag = subprocess.run(
+            "id; ls -laR " + str(REPO.parent / "x") + " 2>&1 | head -0; "
+            "ls -laZ /tmp/kenpi-livewg-* 2>&1 | head -30; "
+            "ls -la /tmp/kenpi-livewg-*/state/gateway/wireguard 2>&1; "
+            "findmnt -T /tmp 2>&1; aa-status 2>&1 | head -3",
+            shell=True, capture_output=True, text=True,
+        ).stdout  # fmt: skip
+        result.stderr += "\n--- diagnostics ---\n" + diag
         raise RuntimeError(
             f"{argv} exited {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
