@@ -1,6 +1,6 @@
 # ADR 0001 — Authenticated WebSocket push
 
-Status: Accepted (design). Implementation: not started.
+Status: Accepted (design). Implementation: server side implemented and tested (`kenpi/gateway/`); not validated on a Pi or with a real Android client. Camera/video/media events have no producers yet and none are fabricated.
 
 ## Decision
 REST remains authoritative for snapshots and commands. WebSocket is a

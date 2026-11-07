@@ -1,6 +1,6 @@
 # ADR 0002 — Android pairing
 
-Status: Accepted (design). Implementation: not started.
+Status: Accepted (design). Implementation: Pi side implemented and tested (`kenpi/security/devices.py`, `kenpi-devices` CLI). The Android client (QR scan, Keystore key, refresh) is NOT implemented.
 
 ## Decision
 One-time QR enrolment; every installation has its own identity and revocable

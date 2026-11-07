@@ -30,6 +30,18 @@ except importlib.metadata.PackageNotFoundError:
     _KENPI_VERSION = "unknown"
 
 
+def disabled_state(
+    capabilities: tuple[Capability, ...], name: str
+) -> dict[str, object]:
+    match = next((c for c in capabilities if c.name == name), None)
+    return {
+        "available": False,
+        "state": match.state.value if match else "unsupported",
+        "evidence": match.evidence.name if match else "E0",
+        "reason": match.detail if match else "capability is not declared",
+    }
+
+
 def capability_payload(capabilities: tuple[Capability, ...]) -> dict[str, object]:
     return {
         "capabilities": [
@@ -145,13 +157,7 @@ class KenpiApiService:
         }
 
         def disabled(name: str) -> dict[str, object]:
-            match = next((c for c in capabilities if c.name == name), None)
-            return {
-                "available": False,
-                "state": match.state.value if match else "unsupported",
-                "evidence": match.evidence.name if match else "E0",
-                "reason": match.detail if match else "capability is not declared",
-            }
+            return disabled_state(capabilities, name)
 
         class Handler(BaseHTTPRequestHandler):
             timeout = 10.0

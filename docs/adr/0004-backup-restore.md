@@ -1,6 +1,6 @@
 # ADR 0004 — Backup and restore
 
-Status: Accepted (design). Implementation: not started.
+Status: Accepted (design). Implementation: engine, local and SFTP destinations, CLI and nightly timer implemented and tested (`kenpi/recovery/`, `kenpi-backup`). SFTP is not validated against a live server; restore has not been exercised on a Pi.
 
 ## Decision
 Backups are versioned, integrity-checked archives. Restore is a transaction.

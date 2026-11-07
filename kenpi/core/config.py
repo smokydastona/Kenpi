@@ -24,6 +24,12 @@ class KenpiConfig:
     vehicle_uart_baud: int = 0
     vehicle_heartbeat_timeout_seconds: float = 5.0
     media_directory: str = ""
+    state_directory: str = "/var/lib/kenpi"
+    gateway_enabled: bool = False
+    gateway_hosts: tuple[str, ...] = ()
+    gateway_port: int = 8443
+    wireguard_network: str = ""
+    wireguard_port: int = 51820
 
     def _validate_vehicle_link(self) -> None:
         _validate_vehicle_link_fields(self)
@@ -73,10 +79,57 @@ class KenpiConfig:
             )
         ):
             raise ConfigurationError("media_directory must be an absolute path")
+        _validate_gateway(self)
         if not address.is_loopback:
             raise ConfigurationError(
                 "unauthenticated API must bind to loopback in every environment"
             )
+
+
+def _validate_gateway(config: KenpiConfig) -> None:
+    from kenpi.gateway.server import validate_bind_host
+
+    hosts = config.gateway_hosts
+    if isinstance(hosts, list):
+        hosts = tuple(hosts)
+        object.__setattr__(config, "gateway_hosts", hosts)
+    if (
+        type(config.gateway_enabled) is not bool
+        or not isinstance(hosts, tuple)
+        or not all(isinstance(h, str) for h in hosts)
+        or type(config.gateway_port) is not int
+        or type(config.wireguard_port) is not int
+        or not isinstance(config.wireguard_network, str)
+        or not isinstance(config.state_directory, str)
+    ):
+        raise ConfigurationError("gateway settings have invalid types")
+    if (
+        not config.state_directory.startswith("/")
+        or ".." in Path(config.state_directory).parts
+    ):
+        raise ConfigurationError("state_directory must be an absolute path")
+    if not 1 <= config.gateway_port <= 65535 or not 1 <= config.wireguard_port <= 65535:
+        raise ConfigurationError("gateway ports must be between 1 and 65535")
+    if config.wireguard_network:
+        try:
+            network = ipaddress.ip_network(config.wireguard_network)
+        except ValueError as exc:
+            raise ConfigurationError(
+                "wireguard_network must be a CIDR network"
+            ) from exc
+        if not network.is_private or network.version != 4:
+            raise ConfigurationError("wireguard_network must be a private IPv4 range")
+    if not config.gateway_enabled:
+        if hosts:
+            raise ConfigurationError("gateway_hosts require gateway_enabled = true")
+        return
+    if not hosts:
+        raise ConfigurationError("gateway_enabled requires explicit gateway_hosts")
+    for host in hosts:
+        try:
+            validate_bind_host(host)
+        except ValueError as exc:
+            raise ConfigurationError(str(exc)) from exc
 
 
 def _validate_vehicle_link_fields(config: KenpiConfig) -> None:

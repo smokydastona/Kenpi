@@ -8,7 +8,8 @@ import logging
 import signal
 from pathlib import Path
 
-from kenpi.api.app import KenpiApiService
+from kenpi.api.app import KenpiApiService, capability_payload, disabled_state
+from kenpi.core.capabilities import INITIAL_CAPABILITIES
 from kenpi.core.config import load_config
 from kenpi.core.events import EventBus, EventType
 from kenpi.core.safemode import DEFAULT_MARKER, safe_mode_requested
@@ -17,6 +18,68 @@ from kenpi.services.coordinator import ServiceCoordinator
 from kenpi.vehicle.link import SerialPort, VehicleCoordinator, VehicleLinkService
 
 logger = logging.getLogger(__name__)
+
+
+def _build_gateway(config, events, library, link, get_coordinator):
+    """Authenticated gateway; imports are local so cryptography is only needed when enabled."""
+    import ipaddress
+    from pathlib import Path
+
+    from kenpi.gateway.server import GatewayServer
+    from kenpi.remote.wireguard import RemoteState
+    from kenpi.security.devices import DeviceRegistry
+    from kenpi.security.tls import ensure_certificate, server_context
+
+    state_dir = Path(config.state_directory) / "gateway"
+    registry = DeviceRegistry(state_dir)
+    cert, key, fingerprint = ensure_certificate(state_dir, list(config.gateway_hosts))
+    logger.info("Gateway TLS fingerprint (SHA-256): %s", fingerprint)
+    remote_state = RemoteState(state_dir)
+    networks = (
+        (ipaddress.ip_network(config.wireguard_network),)
+        if config.wireguard_network
+        else ()
+    )
+
+    def snapshot(scopes):
+        state: dict[str, object] = {}
+        if "status.read" in scopes:
+            state["status"] = {
+                "coordinator": get_coordinator().describe(),
+                **capability_payload(INITIAL_CAPABILITIES),
+            }
+        if "vehicle.read" in scopes:
+            state["vehicle"] = (
+                {"enabled": True, "link": link.snapshot().describe()}
+                if link
+                else {
+                    "enabled": False,
+                    **disabled_state(
+                        INITIAL_CAPABILITIES, "vehicle_power_coordination"
+                    ),
+                }
+            )
+        if "camera.read" in scopes:
+            # No camera transport exists, so the only truthful state is "unavailable".
+            state["camera"] = disabled_state(INITIAL_CAPABILITIES, "camera_control")
+        if "media.read" in scopes:
+            state["media"] = (
+                {"local_enabled": True, "storage": library.storage()}
+                if library
+                else {"local_enabled": False}
+            )
+        return state
+
+    return GatewayServer(
+        registry,
+        events,
+        snapshot,
+        config.gateway_hosts,
+        config.gateway_port,
+        server_context(cert, key),
+        remote_networks=networks,
+        remote_enabled=remote_state.enabled,
+    )
 
 
 async def _serve(config_path: Path, safe_mode: bool = False) -> None:
@@ -54,10 +117,14 @@ async def _serve(config_path: Path, safe_mode: bool = False) -> None:
         media_library=library,
         vehicle_provider=(lambda: link.snapshot().describe()) if link else None,
     )
+    services: list = [link] if link else []
+    services.append(service)
+    if config.gateway_enabled and not safe_mode:
+        services.append(
+            _build_gateway(config, events, library, link, lambda: coordinator_ref[0])
+        )
     # The link starts first so the API never reports a link that is not running.
-    coordinator = ServiceCoordinator(
-        (link, service) if link else (service,), events=events
-    )
+    coordinator = ServiceCoordinator(tuple(services), events=events)
     coordinator_ref.append(coordinator)
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()

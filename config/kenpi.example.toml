@@ -15,3 +15,9 @@ media_directory = ""
 # vehicle_uart_device = "/dev/ttyAMA0"
 # vehicle_uart_baud = 115200
 vehicle_heartbeat_timeout_seconds = 5.0
+
+# Authenticated gateway (disabled by default; see docs/deployment.md).
+# gateway_enabled = true
+# gateway_hosts = ["192.168.1.50"]
+# gateway_port = 8443
+# state_directory = "/var/lib/kenpi"

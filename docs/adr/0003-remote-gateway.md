@@ -1,6 +1,6 @@
 # ADR 0003 — Local-first remote access with WireGuard
 
-Status: Accepted (design). Implementation: not started.
+Status: Accepted (design). Implementation: policy zones, remote flag, per-device remote permission and WireGuard config rendering/apply implemented and tested (`kenpi/remote/`). No live tunnel has been validated (no `wg` in CI).
 
 ## Boundaries
 1. Local (default): head unit, local dashboard, locally paired devices, LAN API.

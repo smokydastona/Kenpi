@@ -134,3 +134,26 @@ and `/api/v1/diagnostics` reports `"safe_mode": true`. Use it to recover when a
 serial device or the media directory prevents normal startup. It never touches
 the dashcam, which records independently. The idea is inspired by OctoPrint's
 safe mode; no OctoPrint or OctoPi code was used (AGPL/GPL).
+
+## Gateway, pairing, remote access and backups (ADR 0001-0004)
+
+All of this is off by default; the loopback status API is unchanged.
+
+Gateway (`[kenpi]` keys): `gateway_enabled = true`, `gateway_hosts = ["192.168.x.y"]` (explicit
+private addresses, never wildcard/public), `gateway_port = 8443`, `state_directory`,
+`wireguard_network`, `wireguard_port`. Install `deploy/kenpi-gateway.conf` as a systemd drop-in
+(`kenpi-status.service.d/gateway.conf`) so the service may bind private addresses. State lives in
+`<state_directory>/gateway/` (0600 files; credentials are stored only as keyed hashes).
+
+Pairing: `kenpi-devices pair --name "Phone"` prints a single-use, 5-minute `kenpi://pair` payload
+(QR if `qrencode` is installed); after the device enrols, `kenpi-devices pending` then
+`approve <id>`. `list`, `revoke`, `reenroll`, `allow-remote`/`deny-remote` manage devices.
+
+Remote: `kenpi-devices remote init-key|enable|render|apply|disable`. Requires `wireguard-tools`;
+a device also needs `allow-remote`. WireGuard never replaces Kenpi authentication.
+
+Backups: copy `deploy/backup.env.example` to `/etc/kenpi/backup.env`, install
+`deploy/kenpi-backup.{service,timer}`, then `systemctl enable --now kenpi-backup.timer`. Manual:
+`python -m kenpi.tools.backup --dest local:/media/usb create|list|verify|prune|restore`. Restore is
+a dry run unless `--confirm`; credentials are never restored, and paired devices are revoked after a
+restore so they must re-enrol.

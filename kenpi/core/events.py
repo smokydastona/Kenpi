@@ -97,6 +97,8 @@ class EventBus:
         self._clock = clock
         self._lock = threading.Lock()
         self.callback_failures = 0
+        # Sequence numbers restart with the process; clients compare this to detect it.
+        self.stream_id = uuid.uuid4().hex
 
     def publish(self, type: EventType, source: str, **data: object) -> Event | None:
         with self._lock:
@@ -162,6 +164,7 @@ class EventBus:
         selected = [e for e in ring if e.seq > seq][:limit]
         return {
             "events": [e.describe() for e in selected],
+            "stream_id": self.stream_id,
             "latest_seq": latest,
             "oldest_seq": oldest,
             "gap": bool(ring) and seq < oldest - 1,
