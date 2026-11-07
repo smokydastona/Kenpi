@@ -16,11 +16,17 @@ mkdir -p "${build_dir}"
 compile_and_run() {
   local name="$1"
   shift
+  local sources=()
+  while [[ $# -gt 0 && "$1" != "--" ]]; do
+    sources+=("$1")
+    shift
+  done
+  [[ $# -gt 0 ]] && shift # drop the "--" separator; the rest are run arguments
   echo "==> building ${name}"
   g++ -std=c++17 -Wall -Wextra -Werror -I"${firmware_dir}/include" \
-    "$@" -o "${build_dir}/${name}"
+    "${sources[@]}" -o "${build_dir}/${name}"
   echo "==> running ${name}"
-  "${build_dir}/${name}"
+  "${build_dir}/${name}" "$@"
 }
 
 compile_and_run test_protocol \
@@ -31,5 +37,11 @@ compile_and_run test_power_state_machine \
   "${firmware_dir}/src/power_state_machine.cpp" \
   "${firmware_dir}/src/board_config.cpp" \
   "${firmware_dir}/test/test_power_state_machine.cpp"
+
+compile_and_run test_shared_fixtures \
+  "${firmware_dir}/src/protocol.cpp" \
+  "${firmware_dir}/src/messages.cpp" \
+  "${firmware_dir}/test/test_shared_fixtures.cpp" \
+  -- "${root_dir}/protocol/vehicle_frames.txt"
 
 echo "All native firmware tests passed."

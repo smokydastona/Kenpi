@@ -20,6 +20,13 @@ class KenpiConfig:
     camera_request_timeout_seconds: float = 3.0
     vehicle_uart_enabled: bool = False
     head_unit: str = "kenwood-dmx5710s"
+    vehicle_uart_device: str = ""
+    vehicle_uart_baud: int = 0
+    vehicle_heartbeat_timeout_seconds: float = 5.0
+    media_directory: str = ""
+
+    def _validate_vehicle_link(self) -> None:
+        _validate_vehicle_link_fields(self)
 
     def __post_init__(self) -> None:
         from kenpi.headunit.profiles import get_profile
@@ -55,14 +62,54 @@ class KenpiConfig:
             or type(self.vehicle_uart_enabled) is not bool
         ):
             raise ConfigurationError("feature flags must be booleans")
-        if self.camera_enabled or self.vehicle_uart_enabled:
-            raise ConfigurationError(
-                "camera and vehicle transports are not implemented"
+        if self.camera_enabled:
+            raise ConfigurationError("camera transport is not implemented")
+        self._validate_vehicle_link()
+        if not isinstance(self.media_directory, str) or (
+            self.media_directory
+            and (
+                not self.media_directory.startswith("/")
+                or ".." in Path(self.media_directory).parts
             )
+        ):
+            raise ConfigurationError("media_directory must be an absolute path")
         if not address.is_loopback:
             raise ConfigurationError(
                 "unauthenticated API must bind to loopback in every environment"
             )
+
+
+def _validate_vehicle_link_fields(config: KenpiConfig) -> None:
+    from kenpi.vehicle.link import SUPPORTED_BAUD_RATES
+
+    if (
+        not isinstance(config.vehicle_uart_device, str)
+        or type(config.vehicle_uart_baud) is not int
+    ):
+        raise ConfigurationError("vehicle UART settings have invalid types")
+    timeout = config.vehicle_heartbeat_timeout_seconds
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not 0.5 <= timeout <= 300
+    ):
+        raise ConfigurationError(
+            "vehicle heartbeat timeout must be between 0.5 and 300 seconds"
+        )
+    if not config.vehicle_uart_enabled:
+        if config.vehicle_uart_device or config.vehicle_uart_baud:
+            raise ConfigurationError(
+                "vehicle UART device/baud require vehicle_uart_enabled = true"
+            )
+        return
+    device = config.vehicle_uart_device
+    if not device.startswith("/dev/") or ".." in device:
+        raise ConfigurationError("vehicle_uart_device must be a /dev/ path")
+    if config.vehicle_uart_baud not in SUPPORTED_BAUD_RATES:
+        raise ConfigurationError(
+            "vehicle_uart_baud must be explicitly set to one of "
+            + ", ".join(str(rate) for rate in SUPPORTED_BAUD_RATES)
+        )
 
 
 def load_config(path: str | Path) -> KenpiConfig:

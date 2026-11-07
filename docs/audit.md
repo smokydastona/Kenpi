@@ -72,3 +72,18 @@ may mark a capability `AVAILABLE` without E4 evidence.
 7. **Remote access.** If Android access is needed, add a separate authenticated
    TLS gateway rather than loosening the loopback restriction.
 8. **CI.** Add an Android Gradle test job and a hardware-validation checklist.
+
+## Update: software-completable work added
+
+Implemented and unit-tested (not physically verified): typed vehicle messages
+with shared Python/firmware fixtures, host vehicle link with watchdog and
+serial transport, local media library (atomic, non-overwriting downloads;
+partial recovery), frame buffer and FPS/latency tracker, API routes for
+camera/preview/vehicle/media/diagnostics with rate limiting, and dashboard
+vehicle/media screens fed by those routes.
+
+Still blocked by missing evidence or hardware: A810 Lite transport, protocol,
+authentication, settings, recording control, stream decoding, camera media
+listing, playback, DMX5710S display/touch path, ESP32 GPIO/UART firmware
+integration, and all three physical acceptance gates. The dashboard has not
+been exercised in a real browser in this environment.

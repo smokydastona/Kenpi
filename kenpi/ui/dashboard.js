@@ -145,17 +145,67 @@ function renderCameraScreen(capabilities) {
   );
 }
 
-function renderMediaScreen(capabilities) {
-  const media = capabilityByName(capabilities, "media_access");
+function formatBytes(value) {
+  if (typeof value !== "number") return "Unavailable";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let index = 0;
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024;
+    index += 1;
+  }
+  return `${size.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function renderMediaScreen(capabilities, media) {
+  const capability = capabilityByName(capabilities, "media_access");
   const status = document.querySelector("#media-status");
-  status.replaceChildren(
-    media
-      ? renderCapabilityCard(media, {
+  const cards = [
+    capability
+      ? renderCapabilityCard(capability, {
           title: "Camera storage",
-          unavailableHint: "File listing, download, and playback require verified camera file-access evidence.",
+          unavailableHint: "Listing camera files requires verified camera file-access evidence.",
         })
       : renderMissingCapabilityCard("media_access", "Camera storage"),
-  );
+  ];
+  const local = document.createElement("article");
+  local.className = "capability-card";
+  const heading = document.createElement("h4");
+  heading.textContent = "Downloaded copies";
+  local.append(heading);
+  if (!media || !media.local_enabled) {
+    const note = document.createElement("p");
+    note.className = "subtle";
+    note.textContent = "Local media directory is not configured (media_directory).";
+    local.append(note);
+  } else if (!Array.isArray(media.files) || media.files.length === 0) {
+    const note = document.createElement("p");
+    note.className = "subtle";
+    note.textContent = "No downloaded media yet.";
+    local.append(note);
+  } else {
+    const list = document.createElement("ul");
+    list.replaceChildren(
+      ...media.files.map((file) => {
+        const item = document.createElement("li");
+        const link = document.createElement("a");
+        link.href = `/api/v1/media/${encodeURIComponent(file.name)}`;
+        link.textContent = file.name;
+        link.download = file.name;
+        item.append(link, ` · ${file.category.replaceAll("_", " ")} · ${formatBytes(file.size_bytes)}`);
+        return item;
+      }),
+    );
+    local.append(list);
+  }
+  if (media?.storage) {
+    const space = document.createElement("p");
+    space.className = "subtle";
+    space.textContent = `Free: ${formatBytes(media.storage.free_bytes)} of ${formatBytes(media.storage.total_bytes)}`;
+    local.append(space);
+  }
+  cards.push(local);
+  status.replaceChildren(...cards);
 }
 
 function renderSystemScreen(health, serviceStatus) {
@@ -248,18 +298,46 @@ function renderSystemScreen(health, serviceStatus) {
   }
 }
 
-function renderVehicleScreen(capabilities) {
-  const vehicle = capabilityByName(capabilities, "vehicle_power_coordination");
+function renderVehicleScreen(capabilities, vehicle) {
+  const capability = capabilityByName(capabilities, "vehicle_power_coordination");
   const status = document.querySelector("#vehicle-status");
-  status.replaceChildren(
-    vehicle
-      ? renderCapabilityCard(vehicle, {
+  const cards = [
+    capability
+      ? renderCapabilityCard(capability, {
           title: "Ignition & power coordination",
           unavailableHint:
-            "The power state machine runs in firmware/software tests only; no live ignition sensor or auxiliary controller is attached.",
+            "Not physically verified: bench validation of the auxiliary controller is required.",
         })
       : renderMissingCapabilityCard("vehicle_power_coordination", "Ignition & power coordination"),
-  );
+  ];
+  const card = document.createElement("article");
+  card.className = "capability-card";
+  const heading = document.createElement("h4");
+  heading.textContent = "Controller link";
+  card.append(heading);
+  const list = document.createElement("dl");
+  if (!vehicle) {
+    renderDl(list, [["Link", null]]);
+  } else if (!vehicle.enabled) {
+    renderDl(list, [["Link", "disabled (vehicle_uart_enabled is false)"]]);
+  } else {
+    const link = vehicle.link ?? {};
+    renderDl(list, [
+      ["Link", link.link_state],
+      ["Power state", link.power_state],
+      ["Ignition", link.ignition_on == null ? null : link.ignition_on ? "on" : "off"],
+      ["Last message age (s)",
+        typeof link.last_message_age_seconds === "number"
+          ? link.last_message_age_seconds.toFixed(1) : null],
+      ["Shutdown requested", link.shutdown_requested],
+      ["Shutdown acknowledged", link.shutdown_acknowledged],
+      ["Rejected frames", link.rejected_frames],
+      ["Replayed frames", link.replayed_frames],
+    ]);
+  }
+  card.append(list);
+  cards.push(card);
+  status.replaceChildren(...cards);
 }
 
 function setScreen(name) {
@@ -320,11 +398,23 @@ async function refresh() {
       throw new Error("invalid service status response");
     }
     const capabilities = capabilityBody.capabilities;
+    const optional = async (url) => {
+      try {
+        const response = await fetch(url, { cache: "no-store", signal: controller.signal });
+        return response.ok ? await response.json() : null;
+      } catch {
+        return null;
+      }
+    };
+    const [vehicle, media] = await Promise.all([
+      optional("/api/v1/vehicle"),
+      optional("/api/v1/media"),
+    ]);
     renderMainScreen(capabilities, health, serviceStatus);
     renderCameraScreen(capabilities);
-    renderMediaScreen(capabilities);
+    renderMediaScreen(capabilities, media);
     renderSystemScreen(health, serviceStatus);
-    renderVehicleScreen(capabilities);
+    renderVehicleScreen(capabilities, vehicle);
     lastSuccessAt = Date.now();
     status.classList.remove("stale");
     status.textContent = `Status last received: ${new Date(lastSuccessAt).toLocaleTimeString()}.`;

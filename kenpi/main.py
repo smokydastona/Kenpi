@@ -10,7 +10,9 @@ from pathlib import Path
 
 from kenpi.api.app import KenpiApiService
 from kenpi.core.config import load_config
+from kenpi.media.library import LocalMediaLibrary
 from kenpi.services.coordinator import ServiceCoordinator
+from kenpi.vehicle.link import SerialPort, VehicleCoordinator, VehicleLinkService
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +24,29 @@ async def _serve(config_path: Path) -> None:
     # list that is filled immediately after construction, before the service can ever be
     # started (and therefore before any request can reach status_provider).
     coordinator_ref: list[ServiceCoordinator] = []
+    link: VehicleLinkService | None = None
+    if config.vehicle_uart_enabled:
+        device, baud = config.vehicle_uart_device, config.vehicle_uart_baud
+        link = VehicleLinkService(
+            VehicleCoordinator(config.vehicle_heartbeat_timeout_seconds),
+            lambda: SerialPort(device, baud),
+        )
+    library: LocalMediaLibrary | None = None
+    if config.media_directory:
+        library = LocalMediaLibrary(config.media_directory)
+        removed = library.recover_interrupted_transfers()
+        if removed:
+            logger.warning("Removed %d interrupted partial downloads", len(removed))
     service = KenpiApiService(
         config.api_host,
         config.api_port,
         head_unit=config.head_unit,
         status_provider=lambda: coordinator_ref[0].describe(),
+        media_library=library,
+        vehicle_provider=(lambda: link.snapshot().describe()) if link else None,
     )
-    coordinator = ServiceCoordinator((service,))
+    # The link starts first so the API never reports a link that is not running.
+    coordinator = ServiceCoordinator((link, service) if link else (service,))
     coordinator_ref.append(coordinator)
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
