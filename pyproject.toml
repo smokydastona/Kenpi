@@ -7,11 +7,14 @@ name = "kenpi"
 version = "0.1.0"
 description = "A safety-first service foundation for the Kenpi camera gateway"
 requires-python = ">=3.11"
+dependencies = ["cryptography>=43"]
 license = { text = "MIT" }
 readme = "README.md"
 
 [project.scripts]
 kenpi = "kenpi.main:main"
+kenpi-devices = "kenpi.tools.devices:main"
+kenpi-backup = "kenpi.tools.backup:main"
 
 [project.optional-dependencies]
 dev = ["ruff==0.11.2"]

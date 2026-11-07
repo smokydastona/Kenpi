@@ -101,3 +101,13 @@ is E0 reachability data only and proves nothing about A810 Lite behavior. It is
 not a passive sniffer: it does make connections, so run it only against your own
 camera on a bench. The JSON output (`kenpi.profile/1`) can be redacted and kept
 as a fixture once real results exist.
+
+## Third-party leads (unverified, other models)
+
+See [research-corpus.md](research-corpus.md). The community A810 viewer
+`ClanSlum/Kino` (no license; observe, do not copy) suggests HTTP CGI endpoints
+with MD5 request signing after a bind/confirm pairing step, BLE pairing, and
+RTSP live paths under `/livestream/`. That targets the A810, not the A810 Lite,
+so all of it is E0 hypothesis. Verify by capturing your own camera's vendor-app
+traffic (mitmproxy, Wireshark) and recording results as fixtures before any
+capability is enabled.

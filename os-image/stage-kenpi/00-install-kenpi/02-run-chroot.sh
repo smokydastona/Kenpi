@@ -22,12 +22,14 @@ import pathlib, tomllib
 data = tomllib.loads(pathlib.Path("'"$release"'/source/pyproject.toml").read_text())
 assert data["project"]["name"] == "kenpi"
 assert data["build-system"]["requires"] == ["setuptools==78.1.1"]
-assert not data["project"].get("dependencies")
+assert data["project"]["dependencies"] == ["cryptography>=43"]
 '
 
 python3 -m venv "$release/venv"
 "$release/venv/bin/python" -m pip install --no-cache-dir \
 	--disable-pip-version-check 'setuptools==78.1.1'
+"$release/venv/bin/python" -m pip install --no-cache-dir \
+	--disable-pip-version-check --only-binary=:all: 'cryptography>=43'
 "$release/venv/bin/python" -m pip install --no-cache-dir \
 	--disable-pip-version-check --no-deps --no-build-isolation "$release/source"
 "$release/venv/bin/python" -I -c \

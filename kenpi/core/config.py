@@ -19,8 +19,30 @@ class KenpiConfig:
     camera_enabled: bool = False
     camera_request_timeout_seconds: float = 3.0
     vehicle_uart_enabled: bool = False
+    head_unit: str = "kenwood-dmx5710s"
+    vehicle_uart_device: str = ""
+    vehicle_uart_baud: int = 0
+    vehicle_heartbeat_timeout_seconds: float = 5.0
+    media_directory: str = ""
+    state_directory: str = "/var/lib/kenpi"
+    gateway_enabled: bool = False
+    gateway_hosts: tuple[str, ...] = ()
+    gateway_port: int = 8443
+    wireguard_network: str = ""
+    wireguard_port: int = 51820
+    notify_ntfy_url: str = ""
+    notify_webhook_url: str = ""
+
+    def _validate_vehicle_link(self) -> None:
+        _validate_vehicle_link_fields(self)
 
     def __post_init__(self) -> None:
+        from kenpi.headunit.profiles import get_profile
+
+        try:
+            get_profile(self.head_unit)
+        except ValueError as exc:
+            raise ConfigurationError(str(exc)) from exc
         if not isinstance(self.environment, str):
             raise ConfigurationError("environment must be a string")
         if self.environment not in {"production", "development", "test"}:
@@ -48,14 +70,115 @@ class KenpiConfig:
             or type(self.vehicle_uart_enabled) is not bool
         ):
             raise ConfigurationError("feature flags must be booleans")
-        if self.camera_enabled or self.vehicle_uart_enabled:
-            raise ConfigurationError(
-                "camera and vehicle transports are not implemented"
+        if self.camera_enabled:
+            raise ConfigurationError("camera transport is not implemented")
+        self._validate_vehicle_link()
+        if not isinstance(self.media_directory, str) or (
+            self.media_directory
+            and (
+                not self.media_directory.startswith("/")
+                or ".." in Path(self.media_directory).parts
             )
+        ):
+            raise ConfigurationError("media_directory must be an absolute path")
+        _validate_gateway(self)
+        _validate_notify(self)
         if not address.is_loopback:
             raise ConfigurationError(
                 "unauthenticated API must bind to loopback in every environment"
             )
+
+
+def _validate_notify(config: KenpiConfig) -> None:
+    from kenpi.notify.notifier import validate_url
+
+    for value in (config.notify_ntfy_url, config.notify_webhook_url):
+        if not isinstance(value, str):
+            raise ConfigurationError("notification URLs must be strings")
+        if value:
+            try:
+                validate_url(value)
+            except ValueError as exc:
+                raise ConfigurationError(str(exc)) from exc
+
+
+def _validate_gateway(config: KenpiConfig) -> None:
+    from kenpi.gateway.server import validate_bind_host
+
+    hosts = config.gateway_hosts
+    if isinstance(hosts, list):
+        hosts = tuple(hosts)
+        object.__setattr__(config, "gateway_hosts", hosts)
+    if (
+        type(config.gateway_enabled) is not bool
+        or not isinstance(hosts, tuple)
+        or not all(isinstance(h, str) for h in hosts)
+        or type(config.gateway_port) is not int
+        or type(config.wireguard_port) is not int
+        or not isinstance(config.wireguard_network, str)
+        or not isinstance(config.state_directory, str)
+    ):
+        raise ConfigurationError("gateway settings have invalid types")
+    if (
+        not config.state_directory.startswith("/")
+        or ".." in Path(config.state_directory).parts
+    ):
+        raise ConfigurationError("state_directory must be an absolute path")
+    if not 1 <= config.gateway_port <= 65535 or not 1 <= config.wireguard_port <= 65535:
+        raise ConfigurationError("gateway ports must be between 1 and 65535")
+    if config.wireguard_network:
+        try:
+            network = ipaddress.ip_network(config.wireguard_network)
+        except ValueError as exc:
+            raise ConfigurationError(
+                "wireguard_network must be a CIDR network"
+            ) from exc
+        if not network.is_private or network.version != 4:
+            raise ConfigurationError("wireguard_network must be a private IPv4 range")
+    if not config.gateway_enabled:
+        if hosts:
+            raise ConfigurationError("gateway_hosts require gateway_enabled = true")
+        return
+    if not hosts:
+        raise ConfigurationError("gateway_enabled requires explicit gateway_hosts")
+    for host in hosts:
+        try:
+            validate_bind_host(host)
+        except ValueError as exc:
+            raise ConfigurationError(str(exc)) from exc
+
+
+def _validate_vehicle_link_fields(config: KenpiConfig) -> None:
+    from kenpi.vehicle.link import SUPPORTED_BAUD_RATES
+
+    if (
+        not isinstance(config.vehicle_uart_device, str)
+        or type(config.vehicle_uart_baud) is not int
+    ):
+        raise ConfigurationError("vehicle UART settings have invalid types")
+    timeout = config.vehicle_heartbeat_timeout_seconds
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not 0.5 <= timeout <= 300
+    ):
+        raise ConfigurationError(
+            "vehicle heartbeat timeout must be between 0.5 and 300 seconds"
+        )
+    if not config.vehicle_uart_enabled:
+        if config.vehicle_uart_device or config.vehicle_uart_baud:
+            raise ConfigurationError(
+                "vehicle UART device/baud require vehicle_uart_enabled = true"
+            )
+        return
+    device = config.vehicle_uart_device
+    if not device.startswith("/dev/") or ".." in device:
+        raise ConfigurationError("vehicle_uart_device must be a /dev/ path")
+    if config.vehicle_uart_baud not in SUPPORTED_BAUD_RATES:
+        raise ConfigurationError(
+            "vehicle_uart_baud must be explicitly set to one of "
+            + ", ".join(str(rate) for rate in SUPPORTED_BAUD_RATES)
+        )
 
 
 def load_config(path: str | Path) -> KenpiConfig:

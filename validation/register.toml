@@ -1,0 +1,70 @@
+# Machine-readable implementation and validation register, checked by
+# `python -m kenpi.tools.register` and tests/test_register.py.
+# implementation: complete | partial | blocked
+# hardware: true when the capability needs physical evidence
+# evidence: E0..E5 (docs/evidence-and-validation.md); E4+ requires evidence_ref
+# Host tests never promote hardware evidence.
+
+[[capability]]
+id = "camera_control"
+implementation = "blocked"
+hardware = true
+evidence = "E0"
+tests = ["tests/test_camera.py"]
+missing = "A810 Lite transport, pairing/auth, and command evidence (E3 capture)"
+
+[[capability]]
+id = "live_preview"
+implementation = "blocked"
+hardware = true
+evidence = "E0"
+tests = ["tests/test_video_buffer.py", "tests/test_api_routes.py"]
+missing = "Observed A810 Lite stream URL, codec and auth; buffer and metrics are implemented"
+
+[[capability]]
+id = "media_access"
+implementation = "partial"
+hardware = true
+evidence = "E0"
+tests = ["tests/test_media_library.py"]
+missing = "Camera file listing/download protocol; local library is implemented"
+
+[[capability]]
+id = "kenwood_touchscreen"
+implementation = "blocked"
+hardware = true
+evidence = "E0"
+tests = ["tests/test_headunit.py"]
+missing = "Physical DMX5710S display and touch-return validation"
+
+[[capability]]
+id = "vehicle_power_coordination"
+implementation = "partial"
+hardware = true
+evidence = "E0"
+tests = ["tests/test_vehicle_link.py", "tests/test_vehicle_protocol.py"]
+missing = "Verified ESP32-S3 board revision, pinout and bench electrical test"
+
+[[capability]]
+id = "head_unit_registry"
+implementation = "complete"
+hardware = false
+evidence = "E0"
+tests = ["tests/test_headunit.py"]
+missing = ""
+
+[[capability]]
+id = "read_only_api"
+implementation = "complete"
+hardware = false
+evidence = "E0"
+tests = ["tests/test_api_routes.py"]
+missing = ""
+
+[[capability]]
+id = "research_corpus"
+implementation = "complete"
+hardware = false
+evidence = "E0"
+tests = ["tests/test_research_corpus.py"]
+missing = ""

@@ -178,13 +178,16 @@ data = tomllib.loads(pathlib.Path(sys.argv[1]).read_text())
 assert data["project"]["name"] == "kenpi"
 assert data["project"]["version"] == "0.1.0"
 assert data["build-system"]["requires"] == ["setuptools==78.1.1"]
-assert not data["project"].get("dependencies")
+assert data["project"]["dependencies"] == ["cryptography>=43"]
 ' "$release/source/pyproject.toml"
 runuser -u kenpi -- env TMPDIR="$release/build-tmp" \
     python3 -m venv "$release/venv"
 runuser -u kenpi -- env TMPDIR="$release/build-tmp" \
     "$release/venv/bin/python" -m pip install --no-cache-dir \
     --disable-pip-version-check 'setuptools==78.1.1'
+runuser -u kenpi -- env TMPDIR="$release/build-tmp" \
+    "$release/venv/bin/python" -m pip install --no-cache-dir \
+    --disable-pip-version-check --only-binary=:all: 'cryptography>=43'
 runuser -u kenpi -- env TMPDIR="$release/build-tmp" \
     "$release/venv/bin/python" -m pip install --no-cache-dir \
     --disable-pip-version-check --no-deps --no-build-isolation "$release/source"

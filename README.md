@@ -131,7 +131,7 @@ CI (`.github/workflows/ci.yml`) runs the Python checks above on 3.11/3.12 and
 builds a wheel, ShellChecks `deploy/` and `os-image/` scripts, verifies
 `deploy/kenpi-status.service` with `systemd-analyze verify`, runs the firmware
 project's host-executable native unit tests, and runs the Android project's
-JVM unit tests (`./gradlew testDebugUnitTest`). None of these CI jobs build or
+JVM unit and gateway-interop tests (`./gradlew :core:test`). None of these CI jobs build or
 run anything against real camera, Kenwood, or ESP32 hardware.
 
 ## Security and privacy

@@ -43,7 +43,7 @@ touch "$work_dir/stage2/SKIP_IMAGES"
 cat > "$work_dir/config" <<EOF
 IMG_NAME='kenpi'
 PI_GEN_RELEASE='Kenpi (unofficial, based on Raspberry Pi OS)'
-RELEASE='${KENPI_OS_RELEASE:-bookworm}'
+RELEASE='${KENPI_OS_RELEASE:-trixie}'
 STAGE_LIST='stage0 stage1 stage2 ${here}/stage-kenpi'
 ENABLE_SSH='${KENPI_OS_ENABLE_SSH:-0}'
 LOCALE_DEFAULT='${KENPI_OS_LOCALE:-en_US.UTF-8}'

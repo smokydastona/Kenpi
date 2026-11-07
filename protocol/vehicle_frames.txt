@@ -1,0 +1,6 @@
+# name|type|sequence|payload_hex|frame_hex  (shared by Python and firmware tests)
+heartbeat|1|1|0001e240|4b500101000100040001e240ea43
+power_running|2|2|0301|4b5001020002000203012c21
+power_fault_no_ignition|2|65535|0900|4b500102ffff000209009958
+shutdown_request|3|3|001e|4b50010300030002001e889c
+shutdown_ack|4|4||4b50010400040000ebb0

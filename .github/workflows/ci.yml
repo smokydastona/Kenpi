@@ -41,6 +41,7 @@ jobs:
             deploy/install-status.sh \
             deploy/rollback-status.sh \
             os-image/build.sh \
+            os-image/stage-kenpi/prerun.sh \
             os-image/stage-kenpi/00-install-kenpi/01-run.sh \
             os-image/stage-kenpi/00-install-kenpi/02-run-chroot.sh
 
@@ -74,6 +75,34 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - name: Run Android unit tests
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install gateway for interop tests
+        run: python -m pip install . cryptography
+      - name: Run Android and core tests (core talks to the real Python gateway)
         working-directory: android
-        run: ./gradlew testDebugUnitTest --stacktrace
+        env:
+          KENPI_INTEROP_PYTHON: python
+          KENPI_INTEROP_ROOT: ${{ github.workspace }}
+        run: ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --stacktrace
+
+  live-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wireguard-tools wireguard-go openssh-server iproute2
+          python -m pip install '.[dev]' cryptography
+      - name: Unload Ubuntu's wg and wg-quick AppArmor profiles
+        # The profile denies reading configs outside /etc/wireguard; the test keeps them in a temp state dir.
+        run: sudo apparmor_parser -R /etc/apparmor.d/wg-quick /etc/apparmor.d/wg
+      - name: Real OpenSSH SFTP tests
+        run: python -m unittest tests.test_sftp_live -v
+      - name: Real WireGuard tunnel tests
+        run: sudo -E env "PATH=$PATH" KENPI_LIVE_WG=1 python -m unittest tests.test_wireguard_live -v

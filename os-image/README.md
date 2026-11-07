@@ -54,7 +54,7 @@ Optional environment variables, all unset/safe by default:
 | `KENPI_OS_HOSTNAME` | `kenpi` | mDNS/hostname |
 | `KENPI_OS_LOCALE` | `en_US.UTF-8` | |
 | `KENPI_OS_TIMEZONE` | `Etc/UTC` | |
-| `KENPI_OS_RELEASE` | `bookworm` | Debian/Raspberry Pi OS release pi-gen builds |
+| `KENPI_OS_RELEASE` | `trixie` | Release pi-gen builds; must match the pinned pi-gen arm64 branch (its stage0 warns on mismatch, and a bookworm build failed on missing signing keys in CI) |
 | `KENPI_OS_USER` | `pi` | First user account name |
 | `KENPI_OS_WORK_DIR` | `os-image/.pi-gen` | Where pi-gen is cloned/built; not committed |
 

@@ -30,6 +30,24 @@ pins are supplied — see `firmware/README.md`). The parser does not authorize
 hardware actions. Loss-of-link behavior must leave camera recording
 unaffected.
 
+## Typed messages and host link
+
+`kenpi.vehicle.messages` (mirrored in `firmware/include/kenpi/messages.h`)
+defines `HEARTBEAT` (0x01), `POWER_STATE` (0x02), `SHUTDOWN_REQUEST` (0x03) and
+`SHUTDOWN_ACK` (0x04). `protocol/vehicle_frames.txt` holds shared byte-exact
+fixtures verified by both the Python tests and
+`firmware/tools/run_native_tests.sh`.
+
+`kenpi.vehicle.link` provides `VehicleCoordinator` (sequence/replay rejection,
+heartbeat watchdog, snapshot), `VehicleLinkService` and a termios `SerialPort`
+(tested against a pseudo-terminal, not a real controller). Enable with
+`vehicle_uart_enabled`, `vehicle_uart_device` and an explicit
+`vehicle_uart_baud`. Link loss only changes the reported state. A
+`SHUTDOWN_REQUEST` is acknowledged only when an injected handler accepts it;
+`main` configures none, so requests are reported but not acted on or
+acknowledged. Firmware does not yet send these messages (no GPIO/UART
+integration without a bench-verified `BoardConfig`).
+
 ## Physical validation required
 
 Verify the exact board/pinout, UART voltage levels, isolation/protection, ignition

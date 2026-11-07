@@ -5,3 +5,19 @@ api_port = 8080
 camera_enabled = false
 camera_request_timeout_seconds = 3.0
 vehicle_uart_enabled = false
+# See docs/head-units.md for supported profile keys.
+head_unit = "kenwood-dmx5710s"
+# Optional: absolute directory holding downloaded media copies ("" disables).
+media_directory = ""
+# Optional vehicle controller link. Enable only after bench verification
+# (docs/vehicle-power-management.md); device and baud must both be explicit.
+# vehicle_uart_enabled = true
+# vehicle_uart_device = "/dev/ttyAMA0"
+# vehicle_uart_baud = 115200
+vehicle_heartbeat_timeout_seconds = 5.0
+
+# Authenticated gateway (disabled by default; see docs/deployment.md).
+# gateway_enabled = true
+# gateway_hosts = ["192.168.1.50"]
+# gateway_port = 8443
+# state_directory = "/var/lib/kenpi"

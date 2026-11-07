@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from typing import Protocol
 
+from kenpi.core.events import EventBus, EventType
+
 
 class ManagedService(Protocol):
     """stop must be safe after partial startup and when already stopped."""
@@ -15,8 +17,11 @@ class ManagedService(Protocol):
 
 
 class ServiceCoordinator:
-    def __init__(self, services: tuple[ManagedService, ...]) -> None:
+    def __init__(
+        self, services: tuple[ManagedService, ...], events: EventBus | None = None
+    ) -> None:
         self._services = services
+        self._events = events
         self._started: list[ManagedService] = []
         self._lock = asyncio.Lock()
 
@@ -39,6 +44,10 @@ class ServiceCoordinator:
             "is_running": bool(started),
         }
 
+    def _publish(self, kind: EventType, service: object, **data: object) -> None:
+        if self._events is not None:
+            self._events.publish(kind, type(service).__name__, **data)
+
     async def start(self) -> None:
         async with self._lock:
             if self._started:
@@ -46,7 +55,14 @@ class ServiceCoordinator:
             try:
                 for service in self._services:
                     self._started.append(service)
-                    await service.start()
+                    try:
+                        await service.start()
+                    except BaseException as exc:
+                        self._publish(
+                            EventType.SERVICE_FAILED, service, error=type(exc).__name__
+                        )
+                        raise
+                    self._publish(EventType.SERVICE_STARTED, service)
             except BaseException as startup_error:
                 try:
                     await self._stop()
@@ -78,5 +94,10 @@ class ServiceCoordinator:
                 task.result()
             except BaseException as exc:
                 failures.append(exc)
+                self._publish(
+                    EventType.SERVICE_FAILED, service, error=type(exc).__name__
+                )
+            else:
+                self._publish(EventType.SERVICE_STOPPED, service)
         if failures:
             raise BaseExceptionGroup("one or more services failed to stop", failures)

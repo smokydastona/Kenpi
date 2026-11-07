@@ -1,4 +1,4 @@
-"""Loopback-only read-only HTTP API for health and verified capabilities."""
+"""Loopback-only, read-only HTTP API: health, capabilities, status, events, media."""
 
 from __future__ import annotations
 
@@ -14,8 +14,12 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from typing import Callable
+from urllib.parse import parse_qs
 
 from kenpi.core.capabilities import Capability, INITIAL_CAPABILITIES
+from kenpi.core.events import EventBus
+from kenpi.headunit.profiles import list_profiles
+from kenpi.media.library import LocalMediaLibrary, MediaError
 from kenpi.services.health import collect_host_health
 
 logger = logging.getLogger(__name__)
@@ -24,6 +28,18 @@ try:
     _KENPI_VERSION = importlib.metadata.version("kenpi")
 except importlib.metadata.PackageNotFoundError:
     _KENPI_VERSION = "unknown"
+
+
+def disabled_state(
+    capabilities: tuple[Capability, ...], name: str
+) -> dict[str, object]:
+    match = next((c for c in capabilities if c.name == name), None)
+    return {
+        "available": False,
+        "state": match.state.value if match else "unsupported",
+        "evidence": match.evidence.name if match else "E0",
+        "reason": match.detail if match else "capability is not declared",
+    }
 
 
 def capability_payload(capabilities: tuple[Capability, ...]) -> dict[str, object]:
@@ -40,8 +56,29 @@ def capability_payload(capabilities: tuple[Capability, ...]) -> dict[str, object
     }
 
 
+class _TokenBucket:
+    def __init__(self, rate_per_second: float, burst: int) -> None:
+        self._rate = rate_per_second
+        self._burst = float(burst)
+        self._tokens = float(burst)
+        self._updated = time.monotonic()
+        self._lock = threading.Lock()
+
+    def allow(self) -> bool:
+        with self._lock:
+            now = time.monotonic()
+            self._tokens = min(
+                self._burst, self._tokens + (now - self._updated) * self._rate
+            )
+            self._updated = now
+            if self._tokens < 1.0:
+                return False
+            self._tokens -= 1.0
+            return True
+
+
 class KenpiApiService:
-    """A read-only local API; no command or media routes are exposed."""
+    """A read-only local API. Every route is GET; there are no command or write routes."""
 
     def __init__(
         self,
@@ -50,6 +87,11 @@ class KenpiApiService:
         capabilities: tuple[Capability, ...] = INITIAL_CAPABILITIES,
         health_check: Callable[[], dict[str, object]] | None = None,
         status_provider: Callable[[], dict[str, object]] | None = None,
+        head_unit: str = "kenwood-dmx5710s",
+        vehicle_provider: Callable[[], dict[str, object]] | None = None,
+        media_library: LocalMediaLibrary | None = None,
+        safe_mode: bool = False,
+        events: EventBus | None = None,
     ) -> None:
         try:
             address = ipaddress.ip_address(host)
@@ -64,6 +106,11 @@ class KenpiApiService:
         self._capabilities = capabilities
         self._health_check = health_check or collect_host_health
         self._status_provider = status_provider
+        self._head_unit = head_unit
+        self._vehicle_provider = vehicle_provider
+        self._media_library = media_library
+        self._safe_mode = safe_mode
+        self._events = events
         self._server: ThreadingHTTPServer | None = None
         self._server_task: asyncio.Task[None] | None = None
 
@@ -79,6 +126,12 @@ class KenpiApiService:
         capabilities = self._capabilities
         health_check = self._health_check
         status_provider = self._status_provider
+        selected_head_unit = self._head_unit
+        vehicle_provider = self._vehicle_provider
+        media_library = self._media_library
+        safe_mode = self._safe_mode
+        events = self._events
+        limiter = _TokenBucket(rate_per_second=50.0, burst=100)
         started_at_monotonic = time.monotonic()
         started_at_iso = datetime.now(timezone.utc).isoformat()
 
@@ -103,7 +156,12 @@ class KenpiApiService:
             "/static/dashboard.js": ("dashboard.js", "text/javascript; charset=utf-8"),
         }
 
+        def disabled(name: str) -> dict[str, object]:
+            return disabled_state(capabilities, name)
+
         class Handler(BaseHTTPRequestHandler):
+            timeout = 10.0
+
             def handle(self) -> None:
                 try:
                     super().handle()
@@ -115,6 +173,13 @@ class KenpiApiService:
                     )
 
             def do_GET(self) -> None:
+                if not limiter.allow():
+                    self._send_json(429, {"error": "rate_limited"})
+                    return
+                path = self.path.split("?", 1)[0]
+                if path.startswith("/api/v1/media/") and len(path) > 14:
+                    self._send_media(path[len("/api/v1/media/") :])
+                    return
                 asset = assets.get(self.path)
                 if asset is not None:
                     name, content_type = asset
@@ -130,10 +195,101 @@ class KenpiApiService:
                         self._send(200, body, "application/json; charset=utf-8")
                 elif self.path == "/api/v1/capabilities":
                     self._send_json(200, capability_payload(capabilities))
+                elif self.path == "/api/v1/head-units":
+                    self._send_json(
+                        200,
+                        {"selected": selected_head_unit, "head_units": list_profiles()},
+                    )
+                elif self.path == "/api/v1/camera":
+                    self._send_json(200, disabled("camera_control"))
+                elif self.path == "/api/v1/preview":
+                    self._send_json(200, disabled("live_preview"))
+                elif self.path == "/api/v1/vehicle":
+                    if vehicle_provider is None:
+                        self._send_json(
+                            200,
+                            {
+                                "enabled": False,
+                                "reason": "vehicle_uart_enabled is false",
+                                **disabled("vehicle_power_coordination"),
+                            },
+                        )
+                    else:
+                        self._send_json(
+                            200, {"enabled": True, "link": vehicle_provider()}
+                        )
+                elif self.path == "/api/v1/media":
+                    camera = disabled("media_access")
+                    if media_library is None:
+                        self._send_json(200, {"local_enabled": False, "camera": camera})
+                    else:
+                        try:
+                            body = {
+                                "local_enabled": True,
+                                "files": [
+                                    item.describe()
+                                    for item in media_library.list_media()
+                                ],
+                                "storage": media_library.storage(),
+                                "camera": camera,
+                            }
+                        except OSError:
+                            logger.warning("Media library listing failed")
+                            self._send_json(503, {"error": "media_unavailable"})
+                        else:
+                            self._send_json(200, body)
+                elif self.path == "/api/v1/diagnostics":
+                    self._send_json(
+                        200,
+                        {
+                            "version": _KENPI_VERSION,
+                            "head_unit": selected_head_unit,
+                            "safe_mode": safe_mode,
+                            "capability_states": {
+                                c.name: c.state.value for c in capabilities
+                            },
+                            "status": build_status_payload(),
+                        },
+                    )
+                elif path == "/api/v1/events":
+                    if events is None:
+                        self._send_json(503, {"error": "events_unavailable"})
+                    else:
+                        query = parse_qs(self.path.partition("?")[2])
+                        try:
+                            after = int(query.get("after", ["0"])[0])
+                            limit = int(query.get("limit", ["100"])[0])
+                            if after < 0 or not 1 <= limit <= 500:
+                                raise ValueError
+                        except ValueError:
+                            self._send_json(400, {"error": "bad_query"})
+                        else:
+                            self._send_json(200, events.events_after(after, limit))
                 elif self.path == "/api/v1/status":
                     self._send_json(200, build_status_payload())
                 else:
                     self._send_json(404, {"error": "not_found"})
+
+            def _send_media(self, name: str) -> None:
+                if media_library is None:
+                    self._send_json(404, {"error": "not_found"})
+                    return
+                try:
+                    path = media_library.open_path(name)
+                    size = path.stat().st_size
+                    handle = path.open("rb")
+                except (MediaError, OSError):
+                    self._send_json(404, {"error": "not_found"})
+                    return
+                with handle:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Length", str(size))
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("X-Content-Type-Options", "nosniff")
+                    self.end_headers()
+                    while chunk := handle.read(64 * 1024):
+                        self.wfile.write(chunk)
 
             def _send_json(self, status: int, value: dict[str, object]) -> None:
                 self._send(

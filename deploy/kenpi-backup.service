@@ -1,0 +1,21 @@
+[Unit]
+Description=Kenpi configuration and metadata backup
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=kenpi
+Group=kenpi
+EnvironmentFile=/etc/kenpi/backup.env
+ExecStart=/opt/kenpi/current/venv/bin/python -m kenpi.tools.backup --config /etc/kenpi/status.toml --dest ${KENPI_BACKUP_DEST} create --prune ${KENPI_BACKUP_KEEP}
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadWritePaths=-/media -/mnt
+StateDirectory=kenpi
+RestrictSUIDSGID=true
+LockPersonality=true

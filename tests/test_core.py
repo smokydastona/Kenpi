@@ -39,8 +39,32 @@ class ConfigurationTests(unittest.TestCase):
     def test_rejects_unimplemented_hardware_transports(self) -> None:
         with self.assertRaises(ConfigurationError):
             KenpiConfig(camera_enabled=True)
-        with self.assertRaises(ConfigurationError):
-            KenpiConfig(vehicle_uart_enabled=True)
+
+    def test_vehicle_uart_requires_explicit_device_and_baud(self) -> None:
+        for kwargs in (
+            {"vehicle_uart_enabled": True},
+            {"vehicle_uart_enabled": True, "vehicle_uart_device": "/dev/ttyAMA0"},
+            {
+                "vehicle_uart_enabled": True,
+                "vehicle_uart_device": "/etc/passwd",
+                "vehicle_uart_baud": 115200,
+            },
+            {
+                "vehicle_uart_enabled": True,
+                "vehicle_uart_device": "/dev/ttyAMA0",
+                "vehicle_uart_baud": 1234,
+            },
+            {"vehicle_uart_device": "/dev/ttyAMA0", "vehicle_uart_baud": 115200},
+            {"vehicle_heartbeat_timeout_seconds": 0},
+        ):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ConfigurationError):
+                KenpiConfig(**kwargs)
+        config = KenpiConfig(
+            vehicle_uart_enabled=True,
+            vehicle_uart_device="/dev/ttyAMA0",
+            vehicle_uart_baud=115200,
+        )
+        self.assertTrue(config.vehicle_uart_enabled)
 
     def test_initial_device_capabilities_are_not_claimed_available(self) -> None:
         self.assertTrue(

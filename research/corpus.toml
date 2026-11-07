@@ -1,0 +1,416 @@
+# Machine-readable research corpus. Metadata (license, activity) lives in
+# research/metadata.json and is refreshed with: python -m kenpi.tools.research_corpus refresh
+
+[[project]]
+slug = "openDsh/dash"
+category = "headunit"
+role = "Qt/QML Android Auto + vehicle dashboard"
+kenpi_use = "Reference for touchscreen navigation and camera/media tabs; GPL, do not copy code"
+
+[[project]]
+slug = "opencardev/openauto"
+category = "headunit"
+role = "Android Auto head unit (Qt)"
+kenpi_use = "Reference only; needs phone projection, not a Pi-as-source path"
+
+[[project]]
+slug = "opencardev/crankshaft"
+category = "headunit"
+role = "Pi Android Auto distribution"
+kenpi_use = "Reference for Pi image/boot/kiosk integration"
+
+[[project]]
+slug = "f1xpl/openauto"
+category = "headunit"
+role = "Original OpenAuto"
+kenpi_use = "Upstream of OpenCarDev fork; no license declared"
+
+[[project]]
+slug = "aa-proxy/aa-proxy-rs"
+category = "headunit"
+role = "Android Auto protocol proxy (Rust)"
+kenpi_use = "Protocol reference only; Kenpi is not an Android Auto receiver"
+
+[[project]]
+slug = "nisargjhaveri/WirelessAndroidAutoDongle"
+category = "headunit"
+role = "Pi wireless Android Auto dongle"
+kenpi_use = "Reference for Pi USB gadget/Bluetooth handoff"
+
+[[project]]
+slug = "Mauznemo/SmartifyOS"
+category = "headunit"
+role = "Custom infotainment GUI"
+kenpi_use = "Reference; license is non-standard, review before any reuse"
+
+[[project]]
+slug = "PiDashLab/EMU-PiDashboard"
+category = "headunit"
+role = "Qt/QML Pi dashboard with SocketCAN"
+kenpi_use = "UI/kiosk reference; GPL"
+
+[[project]]
+slug = "espressif/esp-idf"
+category = "esp32"
+role = "Official ESP32-S3 framework"
+kenpi_use = "Target for a future production firmware build (currently Arduino)"
+
+[[project]]
+slug = "espressif/arduino-esp32"
+category = "esp32"
+role = "Arduino core for ESP32"
+kenpi_use = "Current firmware framework"
+
+[[project]]
+slug = "platformio/platformio-core"
+category = "esp32"
+role = "Embedded build/test"
+kenpi_use = "Already used (firmware/platformio.ini)"
+
+[[project]]
+slug = "esphome/esphome"
+category = "esp32"
+role = "Device firmware/integration"
+kenpi_use = "Design reference only"
+
+[[project]]
+slug = "meshtastic/firmware"
+category = "esp32"
+role = "ESP32 + SX1262 LoRa firmware"
+kenpi_use = "Board-support reference for SX1262; GPL; not vehicle power firmware"
+
+[[project]]
+slug = "jgromes/RadioLib"
+category = "esp32"
+role = "Radio abstraction (SX126x)"
+kenpi_use = "Candidate dependency if the LoRa radio is ever used; MIT"
+
+[[project]]
+slug = "raspberrypi/linux"
+category = "pi"
+role = "Raspberry Pi kernel"
+kenpi_use = "Reference for UART/GPIO overlays"
+
+[[project]]
+slug = "raspberrypi/documentation"
+category = "pi"
+role = "Official Pi docs"
+kenpi_use = "Verify UART/GPIO electrical facts before assigning pins"
+
+[[project]]
+slug = "brgl/libgpiod"
+category = "pi"
+role = "Linux GPIO character device"
+kenpi_use = "Preferred GPIO interface when GPIO is needed"
+
+[[project]]
+slug = "gpiozero/gpiozero"
+category = "pi"
+role = "Python GPIO"
+kenpi_use = "Optional; libgpiod preferred"
+
+[[project]]
+slug = "pyserial/pyserial"
+category = "pi"
+role = "Serial port library"
+kenpi_use = "Not adopted: kenpi.vehicle.link uses stdlib termios to stay dependency-free"
+
+[[project]]
+slug = "bluez/bluez"
+category = "pi"
+role = "Linux Bluetooth stack"
+kenpi_use = "Needed if BLE pairing with the camera is evidenced"
+
+[[project]]
+slug = "hardbyte/python-can"
+category = "can"
+role = "CAN interface library"
+kenpi_use = "Only if vehicle CAN access is added; LGPL"
+
+[[project]]
+slug = "cantools/cantools"
+category = "can"
+role = "CAN DBC codec"
+kenpi_use = "Only if CAN is added"
+
+[[project]]
+slug = "commaai/opendbc"
+category = "can"
+role = "CAN databases"
+kenpi_use = "Reference; vehicle-specific"
+
+[[project]]
+slug = "linux-can/can-utils"
+category = "can"
+role = "SocketCAN tools"
+kenpi_use = "Diagnostic tooling"
+
+[[project]]
+slug = "collin80/SavvyCAN"
+category = "can"
+role = "CAN analyzer"
+kenpi_use = "Diagnostic tooling"
+
+[[project]]
+slug = "openvehicles/Open-Vehicle-Monitoring-System-3"
+category = "can"
+role = "Vehicle monitoring firmware"
+kenpi_use = "Reference for ignition/12V monitoring design"
+
+[[project]]
+slug = "commaai/openpilot"
+category = "can"
+role = "Vehicle integration stack"
+kenpi_use = "Architecture reference only; out of scope"
+
+[[project]]
+slug = "GStreamer/gstreamer"
+category = "media"
+role = "Media pipeline framework"
+kenpi_use = "Candidate RTSP/H.264 decode path on Pi (hardware decode)"
+
+[[project]]
+slug = "FFmpeg/FFmpeg"
+category = "media"
+role = "Decode/transcode"
+kenpi_use = "Candidate decoder via subprocess; verify build license flags"
+
+[[project]]
+slug = "bluenviron/mediamtx"
+category = "media"
+role = "RTSP/WebRTC/HLS server"
+kenpi_use = "Candidate bridge: camera RTSP to browser-friendly stream"
+
+[[project]]
+slug = "AlexxIT/go2rtc"
+category = "media"
+role = "Stream bridge"
+kenpi_use = "Candidate bridge for RTSP to MSE/WebRTC/MJPEG in the dashboard"
+
+[[project]]
+slug = "mpv-player/mpv"
+category = "media"
+role = "Media player"
+kenpi_use = "Candidate local playback of downloaded clips"
+
+[[project]]
+slug = "home-assistant/core"
+category = "integration"
+role = "Integration/state architecture"
+kenpi_use = "Design reference for coordinator/entity pattern"
+
+[[project]]
+slug = "node-red/node-red"
+category = "integration"
+role = "Flow automation"
+kenpi_use = "Optional tooling, not a dependency"
+
+[[project]]
+slug = "eclipse-mosquitto/mosquitto"
+category = "integration"
+role = "MQTT broker"
+kenpi_use = "Optional internal bus; not adopted (single-process design)"
+
+[[project]]
+slug = "eclipse-paho/paho.mqtt.python"
+category = "integration"
+role = "MQTT client"
+kenpi_use = "Optional; not adopted"
+
+[[project]]
+slug = "wireshark/wireshark"
+category = "reveng"
+role = "Packet analysis"
+kenpi_use = "Capture A810 Lite app traffic for protocol evidence"
+
+[[project]]
+slug = "mitmproxy/mitmproxy"
+category = "reveng"
+role = "HTTP(S) interception"
+kenpi_use = "Record vendor-app HTTP calls for the contract"
+
+[[project]]
+slug = "alufers/mitmproxy2swagger"
+category = "reveng"
+role = "Capture to OpenAPI"
+kenpi_use = "Turn captures into an endpoint contract"
+
+[[project]]
+slug = "secdev/scapy"
+category = "reveng"
+role = "Packet crafting"
+kenpi_use = "Protocol experiments"
+
+[[project]]
+slug = "NationalSecurityAgency/ghidra"
+category = "reveng"
+role = "Binary analysis"
+kenpi_use = "Analyze camera firmware you legally obtained"
+
+[[project]]
+slug = "ReFirmLabs/binwalk"
+category = "reveng"
+role = "Firmware extraction"
+kenpi_use = "Firmware inspection"
+
+[[project]]
+slug = "onekey-sec/unblob"
+category = "reveng"
+role = "Firmware extraction"
+kenpi_use = "Firmware inspection"
+
+[[project]]
+slug = "frida/frida"
+category = "reveng"
+role = "Dynamic instrumentation"
+kenpi_use = "Inspect vendor app request signing"
+
+[[project]]
+slug = "openocd-org/openocd"
+category = "reveng"
+role = "JTAG/SWD debugging"
+kenpi_use = "ESP32-S3 debugging"
+
+[[project]]
+slug = "renode/renode"
+category = "test"
+role = "Embedded simulation"
+kenpi_use = "Possible firmware simulation; evaluate ESP32-S3 support first"
+
+[[project]]
+slug = "niwciu/PY_MICRO_HIL"
+category = "test"
+role = "Pi hardware-in-the-loop framework"
+kenpi_use = "Candidate for bench acceptance automation"
+
+[[project]]
+slug = "pytest-dev/pytest"
+category = "test"
+role = "Python tests"
+kenpi_use = "Not adopted: suite uses unittest with no deps"
+
+[[project]]
+slug = "HypothesisWorks/hypothesis"
+category = "test"
+role = "Property tests"
+kenpi_use = "Candidate for protocol decoder fuzzing"
+
+[[project]]
+slug = "microsoft/playwright"
+category = "test"
+role = "Browser automation"
+kenpi_use = "Candidate for dashboard browser tests"
+
+[[project]]
+slug = "robotframework/robotframework"
+category = "test"
+role = "Acceptance tests"
+kenpi_use = "Optional for hardware acceptance procedures"
+
+[[project]]
+slug = "ThrowTheSwitch/Unity"
+category = "test"
+role = "Embedded C tests"
+kenpi_use = "Already referenced in platformio.ini"
+
+[[project]]
+slug = "google/googletest"
+category = "test"
+role = "C++ tests"
+kenpi_use = "Alternative to the current assertion macros"
+
+[[project]]
+slug = "astral-sh/ruff"
+category = "quality"
+role = "Lint/format"
+kenpi_use = "Already used (pinned)"
+
+[[project]]
+slug = "PyCQA/bandit"
+category = "quality"
+role = "Python security lint"
+kenpi_use = "Candidate CI job"
+
+[[project]]
+slug = "semgrep/semgrep"
+category = "quality"
+role = "Static analysis"
+kenpi_use = "Candidate CI job"
+
+[[project]]
+slug = "aquasecurity/trivy"
+category = "quality"
+role = "Vulnerability scanning"
+kenpi_use = "Candidate for OS image/deps"
+
+[[project]]
+slug = "usebruno/bruno"
+category = "api"
+role = "API client"
+kenpi_use = "Capture/replay collections for the camera contract"
+
+[[project]]
+slug = "hoppscotch/hoppscotch"
+category = "api"
+role = "API client"
+kenpi_use = "Alternative"
+
+[[project]]
+slug = "350d/70Mai_A810S_Firmware"
+category = "dashcam"
+role = "Custom firmware for A810S (not Lite)"
+kenpi_use = "Evidence lead: HTTP control with signature validation, RTSP preview, FTP/telnet in this fork; do NOT assume A810 Lite parity"
+
+[[project]]
+slug = "350d/70Mai_A800S_Firmware"
+category = "dashcam"
+role = "Custom firmware for A800S"
+kenpi_use = "Related-model lead only"
+
+[[project]]
+slug = "ClanSlum/Kino"
+category = "dashcam"
+role = "A810 viewer (React Native): BLE pairing, signed HTTP CGI, RTSP live"
+kenpi_use = "Strongest protocol lead found; no license, so observe only; target is A810, not Lite"
+
+[[project]]
+slug = "vlw/70mai-a810-cn-mod"
+category = "dashcam"
+role = "Firmware builder for A810 PRO (CN)"
+kenpi_use = "Lead on firmware structure; different model"
+
+[[project]]
+slug = "sparkcyf/70mai-gps-log-viasualizer"
+category = "dashcam"
+role = "A810 GPS log visualizer"
+kenpi_use = "Related to kenpi/tools/gps_log.py"
+
+[[project]]
+slug = "XuZhen86/70MaiM300Toolbox"
+category = "dashcam"
+role = "Python CLI for M300"
+kenpi_use = "Different model; protocol cross-check only"
+
+[[project]]
+slug = "guysoft/OctoPi"
+category = "pi"
+role = "Pi image builder for OctoPrint (GPL-3.0 shell/config)"
+kenpi_use = "Reviewed in depth, code not copied. Ideas reimplemented independently: one-shot safe mode (kenpi --safe), unprivileged service layout, user-editable boot-partition config (not adopted: boot-partition overrides would bypass strict config validation), supervisor with friendly backend-down pages (not adopted: dashboard is served in-process on loopback)"
+
+[[project]]
+slug = "OctoPrint/OctoPrint"
+category = "integration"
+role = "3D-printer web interface (AGPL-3.0 Python)"
+kenpi_use = "Reviewed design, code not copied (AGPL). Ideas reimplemented independently: start-once safe mode that skips optional services. Studied and not adopted: plugin hook system, event bus and app-key approval workflow, because Kenpi has no consumers for them yet"
+
+[[project]]
+slug = "bq/OctoPrint-AppCompanion"
+category = "integration"
+role = "2015 OctoPrint plugin whitelisting one Android app key (source header says AGPLv3; GitHub shows no license)"
+kenpi_use = "Reference only. Shows pre-shared app-key identity for an Android companion; Kenpi's companion has no remote command path, so nothing to adopt"
+
+[[project]]
+slug = "Biohub/octopi"
+category = "integration"
+role = "Unrelated: protein coordinate search in cryo-ET tomograms"
+kenpi_use = "Reviewed and rejected: name collision with OctoPi/OctoPrint, no automotive, Pi or camera relevance"

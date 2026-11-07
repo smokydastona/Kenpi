@@ -8,8 +8,8 @@ is skipped where `::1` cannot be bound.
 
 | Area | State |
 | --- | --- |
-| `kenpi/main.py`, `services/coordinator.py` | Working. Starts only the loopback API; coordinator rolls back on partial startup. |
-| `kenpi/api/app.py`, `ui/` | Working, read-only: `/`, static assets, `/healthz`, `/api/v1/capabilities`. No command, media or WebSocket routes. |
+| `kenpi/main.py`, `services/coordinator.py` | Working. Starts the loopback API, plus the vehicle link when configured; coordinator rolls back on partial startup and publishes lifecycle events. |
+| `kenpi/api/app.py`, `ui/` | Working, GET-only: `/`, static assets, `/healthz` and `/api/v1/{capabilities,status,camera,preview,vehicle,media,diagnostics,head-units,events}`. Media routes serve the local library only. No camera command, write, WebSocket or authentication routes exist. |
 | `core/config.py` | Strict TOML loader. Rejects `camera_enabled` and `vehicle_uart_enabled` as unimplemented and any non-loopback bind. |
 | `core/capabilities.py` | Every hardware capability is `BLOCKED`/`NOT_VERIFIED` at E0. `AVAILABLE` requires E4 or higher. |
 | `camera/lifecycle.py` | State machine that records caller-reported phases only; no I/O. |
@@ -72,3 +72,18 @@ may mark a capability `AVAILABLE` without E4 evidence.
 7. **Remote access.** If Android access is needed, add a separate authenticated
    TLS gateway rather than loosening the loopback restriction.
 8. **CI.** Add an Android Gradle test job and a hardware-validation checklist.
+
+## Update: software-completable work added
+
+Implemented and unit-tested (not physically verified): typed vehicle messages
+with shared Python/firmware fixtures, host vehicle link with watchdog and
+serial transport, local media library (atomic, non-overwriting downloads;
+partial recovery), frame buffer and FPS/latency tracker, API routes for
+camera/preview/vehicle/media/diagnostics with rate limiting, and dashboard
+vehicle/media screens fed by those routes.
+
+Still blocked by missing evidence or hardware: A810 Lite transport, protocol,
+authentication, settings, recording control, stream decoding, camera media
+listing, playback, DMX5710S display/touch path, ESP32 GPIO/UART firmware
+integration, and all three physical acceptance gates. The dashboard has not
+been exercised in a real browser in this environment.

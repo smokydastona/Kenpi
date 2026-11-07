@@ -96,3 +96,64 @@ An optional reproducible pi-gen based build that preinstalls and enables this
 same status service on a fresh Raspberry Pi OS Lite (64-bit) image is in
 `os-image/`. It changes nothing about what the service does; see
 `os-image/README.md` for exact scope, safe defaults, and build instructions.
+
+## Release bundle (CI)
+
+`.github/workflows/bundle.yml` runs on every push and uploads one artifact,
+`kenpi-<version>`, which downloads as a single zip containing:
+
+| Folder | Contents |
+|---|---|
+| `python/` | kenpi wheel |
+| `firmware/` | ESP32-S3 controller binaries (`pio run -e esp32s3`) |
+| `android/` | companion APK (debug-signed; not a Play Store release) |
+| `os-image/` | Raspberry Pi OS image built with pi-gen |
+| `deploy/` | install/rollback scripts, systemd unit, example config |
+| `manifest.json`, `SHA256SUMS` | versions, commit, per-file checksums |
+
+The version is `VERSION` (MAJOR.MINOR, edit to bump a release line) plus the
+commit count, e.g. `0.2.57`, so every commit gets a higher number with no manual
+edits. The same number is stamped into the wheel and the APK (`versionName`,
+`versionCode` = commit count). The OS image installs the committed snapshot, so
+its embedded Python package reports the version in `pyproject.toml`, not the
+stamped one.
+
+If any component fails to build, the manifest marks it `missing`, the bundle
+job fails, and a partial bundle is still uploaded for inspection. Status: this
+workflow has not yet been run on GitHub; the ESP32-S3 build and the pi-gen image
+build in particular have never completed in this project's environment.
+Retention is 90 days. The bundle contains build outputs only; nothing in it is
+hardware-verified.
+
+## Safe mode
+
+`kenpi --safe` (or creating `/var/lib/kenpi/safe-mode-once`, which is consumed
+on the next start so a crash loop cannot persist it) starts only the loopback
+status API. The vehicle UART link and the local media library are not started,
+and `/api/v1/diagnostics` reports `"safe_mode": true`. Use it to recover when a
+serial device or the media directory prevents normal startup. It never touches
+the dashcam, which records independently. The idea is inspired by OctoPrint's
+safe mode; no OctoPrint or OctoPi code was used (AGPL/GPL).
+
+## Gateway, pairing, remote access and backups (ADR 0001-0004)
+
+All of this is off by default; the loopback status API is unchanged.
+
+Gateway (`[kenpi]` keys): `gateway_enabled = true`, `gateway_hosts = ["192.168.x.y"]` (explicit
+private addresses, never wildcard/public), `gateway_port = 8443`, `state_directory`,
+`wireguard_network`, `wireguard_port`. Install `deploy/kenpi-gateway.conf` as a systemd drop-in
+(`kenpi-status.service.d/gateway.conf`) so the service may bind private addresses. State lives in
+`<state_directory>/gateway/` (0600 files; credentials are stored only as keyed hashes).
+
+Pairing: `kenpi-devices pair --name "Phone"` prints a single-use, 5-minute `kenpi://pair` payload
+(QR if `qrencode` is installed); after the device enrols, `kenpi-devices pending` then
+`approve <id>`. `list`, `revoke`, `reenroll`, `allow-remote`/`deny-remote` manage devices.
+
+Remote: `kenpi-devices remote init-key|enable|render|apply|disable`. Requires `wireguard-tools`;
+a device also needs `allow-remote`. WireGuard never replaces Kenpi authentication.
+
+Backups: copy `deploy/backup.env.example` to `/etc/kenpi/backup.env`, install
+`deploy/kenpi-backup.{service,timer}`, then `systemctl enable --now kenpi-backup.timer`. Manual:
+`python -m kenpi.tools.backup --dest local:/media/usb create|list|verify|prune|restore`. Restore is
+a dry run unless `--confirm`; credentials are never restored, and paired devices are revoked after a
+restore so they must re-enrol.

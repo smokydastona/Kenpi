@@ -12,8 +12,8 @@ android {
         applicationId = "com.kenpi.companion"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = System.getenv("KENPI_VERSION_CODE")?.toIntOrNull() ?: 1
+        versionName = System.getenv("KENPI_VERSION") ?: "0.0.0-dev"
     }
 
     buildFeatures {
@@ -33,6 +33,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":core"))
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation(platform("androidx.compose:compose-bom:2025.04.01"))
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.activity:activity-ktx:1.10.1")
