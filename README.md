@@ -45,6 +45,12 @@ dashboard reports declared capabilities and available host health data; it
 does not control the camera. Camera protocol behavior, preview, media access,
 physical Kenwood integration, and vehicle hardware remain unverified.
 
+Host-side hardening includes IPv6 loopback, bounded HTTP handlers, cancellation-safe
+service coordination, evidence-gated serialized camera command policy, and
+freshness-aware status displays. Read-only Pi platform observation and supervised
+installation resources are documented in [Deployment](docs/deployment.md).
+These are not camera drivers or hardware acceptance.
+
 ### Validation gates
 
 | Gate | Required proof | Status |
@@ -102,6 +108,7 @@ kenpi --config config/kenpi.example.toml
 ```
 
 The read-only native Android companion project is in [`android/`](android/).
+It is an optional diagnostic client, not an assumed Kenwood display solution.
 See [Android companion](docs/android-companion.md) for build instructions and
 the API's current remote-access limitations.
 

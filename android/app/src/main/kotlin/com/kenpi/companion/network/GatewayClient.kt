@@ -31,9 +31,7 @@ class GatewayClient {
 
             GatewaySnapshot(
                 applicationStatus = health.optString("application_status", "unknown"),
-                healthDetails = HEALTH_FIELDS.map { field ->
-                    field.label to jsonValue(health, field.key)
-                },
+                healthDetails = formatHealthDetails(healthValues(health)),
                 capabilities = parseCapabilities(capabilities),
             )
         }
@@ -78,9 +76,32 @@ class GatewayClient {
         }
     }
 
-    private fun jsonValue(payload: JSONObject, key: String): String {
-        if (!payload.has(key) || payload.isNull(key)) return "Unavailable"
-        return payload.opt(key)?.toString() ?: "Unavailable"
+    private fun healthValues(payload: JSONObject): Map<String, Any?> = buildMap {
+        HEALTH_FIELDS.forEach { put(it.key, payload.opt(it.key)) }
+        put("collection_status", payload.opt("collection_status"))
+        val hardware = payload.optJSONObject("hardware")
+        val platform = hardware?.optJSONObject("platform")
+        put(
+            "hardware",
+            mapOf(
+                "uptime_seconds" to hardware?.opt("uptime_seconds"),
+                "platform" to mapOf(
+                    "state" to platform?.opt("state"),
+                    "board" to platform?.opt("board"),
+                    "model" to platform?.opt("model"),
+                ),
+            ),
+        )
+        val errors = payload.optJSONArray("collection_errors")
+        put(
+            "collection_errors",
+            errors?.let {
+                List(it.length()) { index ->
+                    val error = it.optJSONObject(index)
+                    mapOf("metric" to error?.opt("metric"), "reason" to error?.opt("reason"))
+                }
+            },
+        )
     }
 
     private fun readBounded(input: InputStream): String {
@@ -109,6 +130,38 @@ class GatewayClient {
             HealthField("Storage free (bytes)", "storage_free_bytes"),
             HealthField("Storage total (bytes)", "storage_total_bytes"),
         )
+
+        internal fun formatHealthDetails(health: Map<String, Any?>): List<Pair<String, String>> =
+            buildList {
+                HEALTH_FIELDS.forEach { field ->
+                    add(field.label to displayValue(health[field.key]))
+                }
+                add("Collection status" to displayValue(health["collection_status"]))
+                val hardware = health["hardware"] as? Map<*, *>
+                val platform = hardware?.get("platform") as? Map<*, *>
+                add("Platform state" to displayValue(platform?.get("state")))
+                add("Board" to displayValue(platform?.get("board")))
+                add("Model" to displayValue(platform?.get("model")))
+                add("Uptime (seconds)" to displayValue(hardware?.get("uptime_seconds")))
+
+                val errors = health["collection_errors"] as? List<*>
+                when {
+                    errors == null -> add("Collection errors" to "Unavailable")
+                    errors.isEmpty() -> add("Collection errors" to "None reported")
+                    else -> errors.forEachIndexed { index, entry ->
+                        val error = entry as? Map<*, *>
+                        val metric = displayValue(error?.get("metric"))
+                        val reason = displayValue(error?.get("reason"))
+                        add("Collection error ${index + 1}" to "$metric: $reason")
+                    }
+                }
+            }
+
+        private fun displayValue(value: Any?): String = when (value) {
+            is String -> value.ifBlank { "Unavailable" }
+            is Number, is Boolean -> value.toString()
+            else -> "Unavailable"
+        }
 
         fun normalizeBaseUrl(input: String): String {
             val value = input.trim()

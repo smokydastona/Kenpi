@@ -1,0 +1,6 @@
+[kenpi]
+environment = "production"
+api_host = "127.0.0.1"
+api_port = 8080
+camera_enabled = false
+vehicle_uart_enabled = false

@@ -16,6 +16,12 @@ class ConfigurationTests(unittest.TestCase):
         with self.assertRaises(ConfigurationError):
             KenpiConfig(api_host="0.0.0.0")
 
+    def test_all_environments_reject_non_loopback_bind(self) -> None:
+        for environment in ("production", "development", "test"):
+            with self.subTest(environment=environment):
+                with self.assertRaises(ConfigurationError):
+                    KenpiConfig(environment=environment, api_host="192.168.1.2")
+
     def test_rejects_wrong_toml_value_type(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "kenpi.toml"
