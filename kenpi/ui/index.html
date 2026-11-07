@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Kenpi — Camera Gateway</title>
+  <link rel="stylesheet" href="/static/dashboard.css">
+  <script src="/static/dashboard.js" defer></script>
+</head>
+<body>
+  <header>
+    <h1>Kenpi</h1>
+    <div class="subtle">70mai A810 Lite gateway status</div>
+  </header>
+  <main>
+    <p id="status" role="status" aria-live="polite">Loading current service capabilities…</p>
+    <section id="capabilities" aria-label="Current capabilities"></section>
+  </main>
+  <footer class="subtle">
+    This dashboard reports only capabilities returned by the running service.
+    No camera control, preview, or Kenwood compatibility is implied.
+  </footer>
+</body>
+</html>

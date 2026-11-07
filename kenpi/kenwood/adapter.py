@@ -1,0 +1,19 @@
+"""Kenwood integration interfaces; physical display paths remain unverified."""
+
+from typing import Protocol
+
+
+class DisplayAdapter(Protocol):
+    async def start(self) -> None: ...
+
+    async def stop(self) -> None: ...
+
+    async def publish_url(self, url: str) -> None: ...
+
+
+class TouchAdapter(Protocol):
+    async def start(self) -> None: ...
+
+    async def stop(self) -> None: ...
+
+    async def next_event(self) -> object: ...
