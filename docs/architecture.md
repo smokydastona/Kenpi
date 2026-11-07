@@ -20,12 +20,18 @@ device integrations:
 - `kenpi.services`: serialized startup and reverse-order shutdown for managed
   services, including partial startup, cancellation-safe cleanup, and preserved
   startup/rollback failures. The CLI uses this coordinator.
-- `kenpi.api` and `kenpi.ui`: a loopback-only read-only HTTP API and a responsive
-  capability and host-health dashboard that displays service-reported states
-  without mock data and clears values after failed refreshes. IPv4 and IPv6
-  loopback are supported; request concurrency and socket waits are bounded.
-- `kenpi.services.health`: best-effort Linux memory, storage, and thermal
-  readings; unavailable host readings are returned as null, not fabricated.
+- `kenpi.api` and `kenpi.ui`: a loopback-only read-only HTTP API and a touch-oriented,
+  five-screen (Main, Camera, Media, System, Vehicle) dashboard that displays
+  service-reported states without mock data, clears values after failed
+  refreshes, and flags stale data when no successful refresh has landed within
+  2.5x the refresh interval. IPv4 and IPv6 loopback are supported; request
+  concurrency and socket waits are bounded. The dashboard is plain HTML/CSS/JS
+  intended to run on any HDMI+touch display; it does not assume or claim
+  physical Kenwood DMX5710S compatibility, which remains unverified.
+- `kenpi.services.health`: best-effort Linux memory, storage, thermal, and
+  non-loopback network interface (link state, byte counters) readings;
+  unavailable host readings are returned as null, not fabricated. Network
+  hardware (MAC) addresses are never read or exposed.
 - `kenpi.hardware`: concrete read-only device-tree/kernel platform observation
   for Pi 4B and Pi 5, integrated with health collection. It does not authorize
   GPIO operations or assign unverified board pins.

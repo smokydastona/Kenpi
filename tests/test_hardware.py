@@ -5,7 +5,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from kenpi.hardware.platform import collect_platform_health, read_temperature
+from kenpi.hardware.platform import (
+    collect_network_health,
+    collect_platform_health,
+    read_temperature,
+)
 
 
 class VirtualFilesystem:
@@ -196,6 +200,86 @@ class HardwareTests(unittest.TestCase):
         (zone / "type").write_text("cpu-thermal")
         (zone / "temp").write_text("42500")
         self.assertEqual(self.collect()["collection_errors"], [])
+
+
+class NetworkHealthTests(unittest.TestCase):
+    def setUp(self) -> None:
+        filesystem = self.enterContext(VirtualFilesystem())
+        self.root = filesystem.root
+        self.net = self.root / "net"
+        self.net.mkdir()
+
+    def _add_interface(self, name: str, operstate: str, rx: str, tx: str) -> Path:
+        interface = self.net / name
+        interface.mkdir()
+        (interface / "operstate").write_text(operstate)
+        statistics = interface / "statistics"
+        statistics.mkdir()
+        (statistics / "rx_bytes").write_text(rx)
+        (statistics / "tx_bytes").write_text(tx)
+        return interface
+
+    def test_loopback_is_excluded_and_real_interfaces_are_reported(self) -> None:
+        self._add_interface("lo", "unknown", "0", "0")
+        self._add_interface("eth0", "up", "1024", "2048")
+        result = collect_network_health(network_root=self.net)
+        self.assertEqual(result["collection_errors"], [])
+        self.assertEqual(
+            result["interfaces"],
+            [{"name": "eth0", "operstate": "up", "rx_bytes": 1024, "tx_bytes": 2048}],
+        )
+
+    def test_interfaces_are_reported_in_name_order(self) -> None:
+        self._add_interface("wlan0", "down", "0", "0")
+        self._add_interface("eth0", "up", "10", "10")
+        result = collect_network_health(network_root=self.net)
+        self.assertEqual(
+            [interface["name"] for interface in result["interfaces"]],
+            ["eth0", "wlan0"],
+        )
+
+    def test_mac_address_is_never_read_or_exposed(self) -> None:
+        interface = self._add_interface("eth0", "up", "1", "1")
+        (interface / "address").write_text("de:ad:be:ef:00:01")
+        result = collect_network_health(network_root=self.net)
+        self.assertNotIn("de:ad:be:ef:00:01", str(result))
+        self.assertNotIn("address", result["interfaces"][0])
+
+    def test_invalid_counters_are_reported_as_collection_errors(self) -> None:
+        self._add_interface("eth0", "up", "not-a-number", "-5")
+        result = collect_network_health(network_root=self.net)
+        self.assertIsNone(result["interfaces"][0]["rx_bytes"])
+        self.assertIsNone(result["interfaces"][0]["tx_bytes"])
+        self.assertIn(
+            {"metric": "network.eth0.rx_bytes", "reason": "invalid_reading"},
+            result["collection_errors"],
+        )
+        self.assertIn(
+            {"metric": "network.eth0.tx_bytes", "reason": "out_of_range"},
+            result["collection_errors"],
+        )
+
+    def test_missing_network_root_is_explicit_not_fatal(self) -> None:
+        result = collect_network_health(network_root=self.root / "missing-net")
+        self.assertEqual(result["interfaces"], [])
+        self.assertIn(
+            {"metric": "network_interfaces", "reason": "not_found"},
+            result["collection_errors"],
+        )
+
+    def test_missing_operstate_is_reported_without_crashing(self) -> None:
+        interface = self.net / "eth0"
+        interface.mkdir()
+        statistics = interface / "statistics"
+        statistics.mkdir()
+        (statistics / "rx_bytes").write_text("1")
+        (statistics / "tx_bytes").write_text("1")
+        result = collect_network_health(network_root=self.net)
+        self.assertIsNone(result["interfaces"][0]["operstate"])
+        self.assertIn(
+            {"metric": "network.eth0.operstate", "reason": "not_found"},
+            result["collection_errors"],
+        )
 
 
 class DeploymentTests(unittest.TestCase):

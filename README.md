@@ -40,10 +40,14 @@ Lite, Raspberry Pi, and Kenwood hardware.
 ## Current status
 
 The repository contains a Python service foundation, a loopback-only read-only
-status API and dashboard, safety policies, and host-independent tests. The
-dashboard reports declared capabilities and available host health data; it
-does not control the camera. Camera protocol behavior, preview, media access,
-physical Kenwood integration, and vehicle hardware remain unverified.
+status API and a five-screen (Main, Camera, Media, System, Vehicle)
+touchscreen-oriented dashboard, safety policies, and host-independent tests.
+The dashboard reports declared capabilities and available host health data
+(memory, storage, thermal, and non-loopback network interface state/traffic);
+it does not control the camera. Camera protocol behavior, preview, media
+access, physical Kenwood integration, and vehicle hardware remain unverified.
+The dashboard's UI is plain HTML/CSS/JS that runs on any HDMI+touch display;
+it does not claim physical DMX5710S compatibility, which is untested.
 
 Host-side hardening includes IPv6 loopback, bounded HTTP handlers, cancellation-safe
 service coordination, evidence-gated serialized camera command policy, and

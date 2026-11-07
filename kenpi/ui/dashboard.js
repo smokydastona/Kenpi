@@ -204,6 +204,30 @@ function renderSystemScreen(health, serviceStatus) {
   }
   renderDl(serviceSection, serviceValues);
 
+  const networkSection = document.querySelector("#system-network");
+  const interfaces = Array.isArray(health?.network?.interfaces)
+    ? health.network.interfaces
+    : [];
+  if (interfaces.length === 0) {
+    const none = document.createElement("p");
+    none.className = "subtle";
+    none.textContent = "No non-loopback network interfaces were reported.";
+    networkSection.replaceChildren(none);
+  } else {
+    const list = document.createElement("ul");
+    list.replaceChildren(
+      ...interfaces.map((iface) => {
+        const item = document.createElement("li");
+        const operstate = iface.operstate ?? "unavailable";
+        const rx = iface.rx_bytes == null ? "unavailable" : `${iface.rx_bytes} B received`;
+        const tx = iface.tx_bytes == null ? "unavailable" : `${iface.tx_bytes} B sent`;
+        item.textContent = `${iface.name}: ${operstate} · ${rx} · ${tx}`;
+        return item;
+      }),
+    );
+    networkSection.replaceChildren(list);
+  }
+
   const diagnostics = document.querySelector("#system-diagnostics");
   const errors = Array.isArray(health?.collection_errors) ? health.collection_errors : [];
   if (errors.length === 0) {

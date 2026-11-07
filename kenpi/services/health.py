@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from kenpi.hardware.platform import (
+    collect_network_health,
     collect_platform_health,
     collection_error_reason,
 )
@@ -23,6 +24,7 @@ def collect_host_health(
     ),
     thermal_root: Path = Path("/sys/class/thermal"),
     uptime_path: Path = Path("/proc/uptime"),
+    network_root: Path = Path("/sys/class/net"),
 ) -> dict[str, Any]:
     """Collect Linux host metrics without substituting mock or estimated values."""
     errors: list[dict[str, str]] = []
@@ -78,10 +80,14 @@ def collect_host_health(
         errors.append({"metric": "storage", "reason": "invalid_source"})
     errors.extend(hardware["collection_errors"])
 
+    network = collect_network_health(network_root=network_root)
+    errors.extend(network["collection_errors"])
+
     return {
         "application_status": "ok",
         "cpu_temperature_c": hardware["cpu_temperature_c"],
         "hardware": hardware,
+        "network": network,
         "collection_status": "partial" if errors else "complete",
         "collection_errors": errors,
         **memory,
