@@ -19,8 +19,44 @@ def load(path: Path = REGISTER) -> list[dict]:
         return tomllib.load(handle)["capability"]
 
 
+REQUIRED = {
+    "id": str,
+    "implementation": str,
+    "hardware": bool,
+    "evidence": str,
+    "tests": list,
+    "missing": str,
+}
+
+
+def _schema_problems(entry: object) -> list[str]:
+    if not isinstance(entry, dict):
+        return ["register entry is not a table"]
+    name = entry.get("id", "<unnamed>")
+    found = []
+    for key, kind in REQUIRED.items():
+        if key not in entry:
+            found.append(f"{name}: missing field {key}")
+        elif not isinstance(entry[key], kind):
+            found.append(f"{name}: field {key} must be {kind.__name__}")
+    if (
+        isinstance(entry.get("evidence"), str)
+        and entry["evidence"] not in EvidenceLevel.__members__
+    ):
+        found.append(f"{name}: unknown evidence level {entry['evidence']!r}")
+    if isinstance(entry.get("tests"), list) and not all(
+        isinstance(t, str) for t in entry["tests"]
+    ):
+        found.append(f"{name}: tests must be strings")
+    return found
+
+
 def problems(entries: list[dict], root: Path = ROOT) -> list[str]:
     found: list[str] = []
+    for entry in entries:
+        found += _schema_problems(entry)
+    if found:
+        return found
     ids = [e["id"] for e in entries]
     if len(ids) != len(set(ids)):
         found.append("duplicate capability id")
@@ -30,26 +66,43 @@ def problems(entries: list[dict], root: Path = ROOT) -> list[str]:
         level = EvidenceLevel[entry["evidence"]]
         if entry["implementation"] not in IMPLEMENTATION:
             found.append(f"{name}: bad implementation status")
-        if level >= EvidenceLevel.E4 and not entry.get("evidence_ref"):
-            found.append(f"{name}: E4+ requires evidence_ref")
-        if entry["implementation"] != "complete" and not entry.get("missing"):
+        if entry["implementation"] != "complete" and not entry["missing"].strip():
             found.append(f"{name}: incomplete capability must state what is missing")
+        if not entry["tests"]:
+            found.append(f"{name}: at least one test file is required")
         for test in entry["tests"]:
             if not (root / test).is_file():
                 found.append(f"{name}: missing test file {test}")
+        if level >= EvidenceLevel.E4:
+            ref = entry.get("evidence_ref")
+            if not isinstance(ref, str) or not _inside(root, ref):
+                found.append(
+                    f"{name}: E4+ requires evidence_ref naming an existing file"
+                )
+            if not entry["hardware"]:
+                found.append(f"{name}: only hardware capabilities carry E4+ evidence")
+        if entry["hardware"] and name not in declared:
+            found.append(f"{name}: hardware capability is not a runtime capability")
         if name in declared:
             cap = declared[name]
+            if not entry["hardware"]:
+                found.append(f"{name}: runtime capability must be marked hardware")
             if cap.evidence != level:
                 found.append(f"{name}: evidence differs from runtime capability")
-            if (
-                cap.state is CapabilityState.AVAILABLE
-                and entry["implementation"] != "complete"
-            ):
+            available = cap.state is CapabilityState.AVAILABLE
+            if available and entry["implementation"] != "complete":
                 found.append(f"{name}: runtime AVAILABLE but register not complete")
+            if not available and entry["implementation"] == "complete":
+                found.append(f"{name}: register complete but runtime not AVAILABLE")
     for name in declared:
         if name not in ids:
             found.append(f"{name}: runtime capability absent from register")
     return found
+
+
+def _inside(root: Path, ref: str) -> bool:
+    target = (root / ref).resolve()
+    return target.is_file() and root.resolve() in target.parents
 
 
 def main() -> int:
