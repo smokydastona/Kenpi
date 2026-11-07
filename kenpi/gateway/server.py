@@ -11,6 +11,7 @@ import asyncio
 import ipaddress
 import json
 import logging
+import re
 import ssl
 import time
 from collections.abc import Callable
@@ -131,6 +132,7 @@ class GatewayServer:
         self._tasks: set[asyncio.Task[None]] = set()
         self._auth_limiter = RateLimiter(10, 60.0)
         self._pair_limiter = RateLimiter(30, 60.0)
+        self._assistant_limiter = RateLimiter(30, 60.0)
         self.bound_ports: list[int] = []
         self._wireguard_info, self._rebind_seconds = wireguard_info, rebind_seconds
         self._unbound: list[str] = []
@@ -255,26 +257,25 @@ class GatewayServer:
             await self._respond(writer, 431, {"error": "bad_request"})
             return
         lines = raw.decode("latin-1").split("\r\n")
-        try:
-            method, target, _ = lines[0].split(" ", 2)
-        except ValueError:
+        parsed = _parse_head(lines)
+        if parsed is None:
             await self._respond(writer, 400, {"error": "bad_request"})
             return
-        headers = {}
-        for line in lines[1:]:
-            if ":" in line:
-                key, _, value = line.partition(":")
-                headers[key.strip().lower()] = value.strip()
+        method, target, headers = parsed
         path = target.split("?", 1)[0]
         if path == "/ws":
             await self._websocket(reader, writer, headers, zone, peer, method)
             return
         body: dict = {}
         if method == "POST":
-            try:
-                length = int(headers.get("content-length", "0"))
-            except ValueError:
-                length = -1
+            raw_length = headers.get("content-length", "0")
+            length = (
+                int(raw_length)
+                if raw_length.isascii()
+                and raw_length.isdigit()
+                and len(raw_length) <= 9
+                else -1
+            )
             limit = 65536 if path.startswith("/api/v1/assistant/") else 4096
             if not 0 <= length <= limit:
                 await self._respond(writer, 413, {"error": "bad_length"})
@@ -340,6 +341,8 @@ class GatewayServer:
             device = self._authenticated(headers, zone)
             if "assistant.use" not in device.scopes:
                 return 403, {"error": "scope_required"}
+            if not self._assistant_limiter.allow(device.device_id):
+                raise AuthError("rate_limited")
             if self._assistant_handler is None:
                 return 404, {"error": "feature_disabled"}
             return await asyncio.to_thread(
@@ -402,6 +405,42 @@ class GatewayServer:
         await writer.drain()
         session = _Session(self, reader, writer, zone, peer)
         await session.run()
+
+
+_SINGLE_HEADERS = frozenset(
+    {"host", "authorization", "content-length", "content-type", "upgrade", "connection"}
+)
+_TOKEN = re.compile(r"^[A-Za-z]{1,10}$")
+
+
+def _parse_head(lines: list[str]) -> tuple[str, str, dict[str, str]] | None:
+    """Strict HTTP/1.x head parsing; None means reject with 400.
+
+    Rejects malformed request lines, duplicate security-relevant headers and any
+    Transfer-Encoding (unsupported, and a request-smuggling vector).
+    """
+    parts = lines[0].split(" ")
+    if (
+        len(parts) != 3
+        or not _TOKEN.match(parts[0])
+        or parts[2] not in ("HTTP/1.0", "HTTP/1.1")
+    ):
+        return None
+    method, target, _ = parts
+    if not target.startswith("/") or not target.isascii() or not target.isprintable():
+        return None
+    headers: dict[str, str] = {}
+    for line in lines[1:]:
+        if not line:
+            continue
+        key, sep, value = line.partition(":")
+        key = key.strip().lower()
+        if not sep or not key or key != key.strip() or " " in key:
+            return None
+        if key == "transfer-encoding" or (key in headers and key in _SINGLE_HEADERS):
+            return None
+        headers[key] = value.strip()
+    return method, target, headers
 
 
 def _text(body: dict, key: str) -> str:

@@ -31,3 +31,13 @@ No credential storage format is invented before actual camera authentication is
 known. Do not put future credentials in TOML files checked into the repository.
 Keep privileged deployment configuration root-owned and logs free of raw
 requests, responses, session values, and private media metadata.
+
+## Gateway request hardening (adversarial-tested)
+
+The gateway rejects with 400: malformed request lines, non-HTTP/1.x versions, duplicate
+`Host`/`Authorization`/`Content-Length`/`Content-Type`/`Upgrade`/`Connection` headers and any
+`Transfer-Encoding`. `Content-Length` must be plain ASCII digits (at most 9). POST bodies are capped
+at 4 KB (64 KB for `/api/v1/assistant/*`). Assistant routes are rate limited to 30 requests per minute
+per device (429). `tests/test_gateway_adversarial.py` covers malformed HTTP and WebSocket frames,
+forged/expired/replayed credentials, revocation closing live sockets, scope enforcement on every
+assistant route, path tricks, and the absence of any phone approval route.
