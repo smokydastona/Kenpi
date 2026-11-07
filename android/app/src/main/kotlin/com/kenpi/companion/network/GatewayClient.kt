@@ -28,10 +28,11 @@ class GatewayClient {
             val normalizedBaseUrl = normalizeBaseUrl(baseUrl)
             val health = getJson("$normalizedBaseUrl/healthz")
             val capabilities = getJson("$normalizedBaseUrl/api/v1/capabilities")
+            val status = getJson("$normalizedBaseUrl/api/v1/status")
 
             GatewaySnapshot(
                 applicationStatus = health.optString("application_status", "unknown"),
-                healthDetails = formatHealthDetails(healthValues(health)),
+                healthDetails = formatServiceDetails(status) + formatHealthDetails(healthValues(health)),
                 capabilities = parseCapabilities(capabilities),
             )
         }
@@ -56,6 +57,17 @@ class GatewayClient {
             connection.disconnect()
         }
     }
+
+    /**
+     * Formats the subset of /api/v1/status that is safe and meaningful to show to a user:
+     * the running application version and how long the gateway process has been up. The
+     * coordinator's internal service list is diagnostic-only and intentionally not surfaced
+     * here to avoid implying the companion app controls or inspects individual services.
+     */
+    private fun formatServiceDetails(payload: JSONObject): List<Pair<String, String>> = listOf(
+        "Gateway version" to displayValue(payload.opt("version")),
+        "Gateway uptime (seconds)" to displayValue(payload.opt("uptime_seconds")),
+    )
 
     private fun parseCapabilities(payload: JSONObject): List<GatewayCapability> {
         val entries = payload.optJSONArray("capabilities")

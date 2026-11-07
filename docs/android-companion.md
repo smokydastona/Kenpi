@@ -5,6 +5,7 @@ Kenpi's existing HTTP status contract:
 
 - `GET /healthz`
 - `GET /api/v1/capabilities`
+- `GET /api/v1/status`
 
 It polls these endpoints while monitoring is enabled, displays only the returned
 health and declared capability data, and accepts HTTPS base URLs. It does not

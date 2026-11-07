@@ -20,6 +20,25 @@ class ServiceCoordinator:
         self._started: list[ManagedService] = []
         self._lock = asyncio.Lock()
 
+    def describe(self) -> dict[str, object]:
+        """Best-effort, lock-free snapshot of coordinator state for diagnostics.
+
+        This intentionally does not take ``self._lock``: it must never block or interfere
+        with service startup/shutdown, and callers (e.g. an HTTP status endpoint running on
+        a worker thread) must treat the result as a point-in-time snapshot that may be
+        slightly stale or, in rare interleavings, reflect a state that is already changing.
+        """
+        started = list(self._started)
+        return {
+            "configured_service_count": len(self._services),
+            "configured_services": [
+                type(service).__name__ for service in self._services
+            ],
+            "started_service_count": len(started),
+            "started_services": [type(service).__name__ for service in started],
+            "is_running": bool(started),
+        }
+
     async def start(self) -> None:
         async with self._lock:
             if self._started:

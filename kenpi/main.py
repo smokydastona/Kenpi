@@ -17,8 +17,18 @@ logger = logging.getLogger(__name__)
 
 async def _serve(config_path: Path) -> None:
     config = load_config(config_path)
-    service = KenpiApiService(config.api_host, config.api_port)
+    # The API service needs a reference to the coordinator for its status endpoint, but the
+    # coordinator needs the already-constructed service. Resolve the cycle with a one-element
+    # list that is filled immediately after construction, before the service can ever be
+    # started (and therefore before any request can reach status_provider).
+    coordinator_ref: list[ServiceCoordinator] = []
+    service = KenpiApiService(
+        config.api_host,
+        config.api_port,
+        status_provider=lambda: coordinator_ref[0].describe(),
+    )
     coordinator = ServiceCoordinator((service,))
+    coordinator_ref.append(coordinator)
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
     installed_signals: list[signal.Signals] = []

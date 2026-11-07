@@ -7,7 +7,13 @@ from kenpi.tools.profiler import main, profile, validate_target
 
 class ProfilerTests(unittest.IsolatedAsyncioTestCase):
     def test_rejects_public_and_non_literal_targets(self) -> None:
-        for host in ("8.8.8.8", "example.com", "0.0.0.0", "224.0.0.1", "2606:4700::1111"):
+        for host in (
+            "8.8.8.8",
+            "example.com",
+            "0.0.0.0",
+            "224.0.0.1",
+            "2606:4700::1111",
+        ):
             with self.assertRaises(ValueError, msg=host):
                 validate_target(host)
         for host in ("192.168.1.1", "10.0.0.1", "127.0.0.1", "169.254.1.1"):

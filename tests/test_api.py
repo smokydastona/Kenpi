@@ -151,6 +151,60 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await service.stop()
 
+    async def test_status_route_reports_version_uptime_and_coordinator_state(
+        self,
+    ) -> None:
+        service = KenpiApiService(
+            port=0,
+            status_provider=lambda: {"is_running": True, "started_service_count": 1},
+        )
+        await service.start()
+        try:
+            response = await asyncio.to_thread(
+                urlopen, f"http://127.0.0.1:{service.bound_port}/api/v1/status"
+            )
+            payload = json.loads(response.read())
+            self.assertIn("version", payload)
+            self.assertIsInstance(payload["uptime_seconds"], (int, float))
+            self.assertGreaterEqual(payload["uptime_seconds"], 0)
+            self.assertIn("started_at", payload)
+            self.assertEqual(
+                payload["coordinator"],
+                {"is_running": True, "started_service_count": 1},
+            )
+        finally:
+            await service.stop()
+
+    async def test_status_route_without_status_provider_omits_coordinator(self) -> None:
+        service = KenpiApiService(port=0)
+        await service.start()
+        try:
+            response = await asyncio.to_thread(
+                urlopen, f"http://127.0.0.1:{service.bound_port}/api/v1/status"
+            )
+            payload = json.loads(response.read())
+            self.assertNotIn("coordinator", payload)
+        finally:
+            await service.stop()
+
+    async def test_status_route_reports_collection_failure_without_crashing(
+        self,
+    ) -> None:
+        def broken_status() -> dict[str, object]:
+            raise RuntimeError("coordinator unavailable")
+
+        service = KenpiApiService(port=0, status_provider=broken_status)
+        await service.start()
+        try:
+            response = await asyncio.to_thread(
+                urlopen, f"http://127.0.0.1:{service.bound_port}/api/v1/status"
+            )
+            payload = json.loads(response.read())
+            self.assertIsNone(payload["coordinator"])
+            self.assertEqual(payload["coordinator_error"], "status collection failed")
+        finally:
+            await service.stop()
+
     async def test_default_health_reports_unavailable_metrics_as_null_or_real_values(
         self,
     ) -> None:

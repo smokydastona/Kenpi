@@ -60,14 +60,20 @@ async def probe_port(host: str, port: int, timeout_seconds: float) -> PortResult
     except ConnectionRefusedError:
         state = "closed"
     except OSError as exc:
-        state = "filtered" if exc.errno in (errno.EHOSTUNREACH, errno.ENETUNREACH) else "error"
+        state = (
+            "filtered"
+            if exc.errno in (errno.EHOSTUNREACH, errno.ENETUNREACH)
+            else "error"
+        )
     finally:
         sock.close()
     return PortResult(port, hypothesis, state)
 
 
 async def profile(
-    host: str, ports: tuple[int, ...] = tuple(CANDIDATE_PORTS), timeout_seconds: float = 2.0
+    host: str,
+    ports: tuple[int, ...] = tuple(CANDIDATE_PORTS),
+    timeout_seconds: float = 2.0,
 ) -> dict[str, object]:
     host = validate_target(host)
     if not 0.1 <= timeout_seconds <= 10:
@@ -90,7 +96,9 @@ async def profile(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Connect-only TCP reachability profile")
+    parser = argparse.ArgumentParser(
+        description="Connect-only TCP reachability profile"
+    )
     parser.add_argument("--target", required=True, help="private IP address literal")
     parser.add_argument("--port", type=int, action="append", help="repeatable")
     parser.add_argument("--timeout", type=float, default=2.0)

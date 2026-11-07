@@ -24,11 +24,12 @@ async function refresh() {
   const status = document.querySelector("#status");
   const section = document.querySelector("#capabilities");
   const healthSection = document.querySelector("#health");
+  const serviceSection = document.querySelector("#service");
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 5000);
   try {
-    const [body, health] = await Promise.all(
-      ["/api/v1/capabilities", "/healthz"].map(async (url) => {
+    const [body, health, serviceStatus] = await Promise.all(
+      ["/api/v1/capabilities", "/healthz", "/api/v1/status"].map(async (url) => {
         const response = await fetch(url, {
           cache: "no-store", signal: controller.signal
         });
@@ -38,6 +39,9 @@ async function refresh() {
     );
     if (!Array.isArray(body.capabilities) || !health || typeof health !== "object") {
       throw new Error("invalid status response");
+    }
+    if (!serviceStatus || typeof serviceStatus !== "object") {
+      throw new Error("invalid service status response");
     }
     section.replaceChildren(...body.capabilities.map((item) => {
       const card = document.createElement("article");
@@ -70,11 +74,40 @@ async function refresh() {
       value.textContent = reading == null ? "Unavailable" : String(reading);
       return [term, value];
     }));
+    const coordinator = serviceStatus.coordinator;
+    const serviceValues = [
+      ["Version", serviceStatus.version],
+      ["Started at", serviceStatus.started_at],
+      ["Uptime (seconds)", typeof serviceStatus.uptime_seconds === "number"
+        ? serviceStatus.uptime_seconds.toFixed(1)
+        : serviceStatus.uptime_seconds]
+    ];
+    if (coordinator && typeof coordinator === "object") {
+      serviceValues.push(
+        ["Coordinator running", coordinator.is_running],
+        ["Started services", Array.isArray(coordinator.started_services)
+          ? coordinator.started_services.join(", ") || "none"
+          : coordinator.started_services],
+        ["Configured services", Array.isArray(coordinator.configured_services)
+          ? coordinator.configured_services.join(", ") || "none"
+          : coordinator.configured_services]
+      );
+    } else if (serviceStatus.coordinator_error) {
+      serviceValues.push(["Coordinator", serviceStatus.coordinator_error]);
+    }
+    serviceSection.replaceChildren(...serviceValues.flatMap(([label, reading]) => {
+      const term = document.createElement("dt");
+      term.textContent = label;
+      const value = document.createElement("dd");
+      value.textContent = reading == null ? "Unavailable" : String(reading);
+      return [term, value];
+    }));
     status.textContent = `Status last received: ${new Date().toLocaleTimeString()}.`;
   } catch {
     controller.abort();
     section.replaceChildren();
     healthSection.replaceChildren();
+    serviceSection.replaceChildren();
     status.textContent = "Kenpi status service is unavailable; previous data has been cleared.";
   } finally {
     window.clearTimeout(timeout);
