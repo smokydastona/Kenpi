@@ -179,3 +179,56 @@ class FilesystemTests(unittest.TestCase):
             if r.name == "filesystem"
         )
         self.assertEqual(fs.status, Status.UNKNOWN)
+
+
+class WireGuardHandshakeTests(unittest.TestCase):
+    def test_handshake_age_from_real_subprocess(self) -> None:
+        import stat
+
+        from kenpi.diagnostics.checks import DiagnosticContext, check_network_routes
+        from kenpi.diagnostics.models import Status
+        from kenpi.diagnostics.system import collect_network
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            net = root / "sys/class/net/wg0"
+            net.mkdir(parents=True)
+            (net / "uevent").write_text("DEVTYPE=wireguard\n")
+            fake = root / "wg"
+            fake.write_text('#!/bin/sh\nprintf "PEERKEY\\t%s\\n" "$KENPI_TEST_STAMP"\n')
+            fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+            import os
+
+            def run(stamp: str):
+                os.environ["KENPI_TEST_STAMP"] = stamp
+                data = collect_network(
+                    root / "proc",
+                    root / "sys",
+                    root / "none",
+                    None,
+                    1000.0,
+                    (str(fake),),
+                )
+                checks = check_network_routes(DiagnosticContext(network=lambda: data))
+                return data, next(c for c in checks if c.name == "wireguard_peer")
+
+            try:
+                data, fresh = run("950")
+                self.assertEqual(data["wireguard_handshake_age"], {"wg0": 50.0})
+                self.assertEqual(fresh.status, Status.OK)
+                self.assertNotIn("PEERKEY", repr(data))
+                _, never = run("0")
+                self.assertEqual(never.status, Status.WARN)
+                _, old = run("100")
+                self.assertEqual(old.status, Status.WARN)
+            finally:
+                os.environ.pop("KENPI_TEST_STAMP", None)
+            data = collect_network(
+                root / "proc",
+                root / "sys",
+                root / "none",
+                None,
+                1000.0,
+                ("no-such-wg",),
+            )
+            self.assertIsNone(data["wireguard_handshake_age"])

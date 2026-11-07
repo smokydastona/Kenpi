@@ -292,3 +292,10 @@ The `filesystem` check reads `/proc/mounts` and reports `host.fs_readonly` when 
 real filesystem (ext4, vfat, f2fs, …) is mounted read-only, which Linux does
 after I/O errors. An unreadable mount table is `unknown`. The cause (SD card,
 power) still needs the kernel log; Kenpi proposes no automatic repair.
+
+### WireGuard peer handshake
+
+When a WireGuard interface exists, `wg show <iface> latest-handshakes` gives the
+age of the newest peer handshake (peer keys are discarded). No handshake in 180 s
+is a `warn` (an idle tunnel without keepalive looks identical); if `wg` is
+missing or unprivileged the check is `unknown`. Not run against a real tunnel.

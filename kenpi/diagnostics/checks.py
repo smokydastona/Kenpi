@@ -187,6 +187,29 @@ def check_network_routes(context: DiagnosticContext) -> list[CheckResult]:
             else "no WireGuard interface present",
         )
     )
+    ages = data.get("wireguard_handshake_age")
+    if wg and ages is None:
+        out.append(
+            _unknown(
+                net,
+                "wireguard_peer",
+                "handshake times unreadable (needs the wg tool and privileges)",
+            )
+        )
+    elif wg and ages is not None:
+        stale = sorted(n for n, a in ages.items() if a is None or a > 180)
+        out.append(
+            CheckResult(
+                net,
+                "wireguard_peer",
+                Status.WARN if stale else Status.OK,
+                "no recent handshake on: "
+                + ", ".join(stale)
+                + " (an idle tunnel without keepalive also looks like this)"
+                if stale
+                else "recent peer handshake on every WireGuard interface",
+            )
+        )
     days = data.get("cert_days_left")
     if days is None:
         out.append(_unknown(net, "tls_certificate", "gateway certificate unreadable"))

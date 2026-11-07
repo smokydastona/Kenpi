@@ -115,12 +115,44 @@ def collect_system(
     return result
 
 
+def _handshake_ages(
+    interfaces: Sequence[str], wg_command: Sequence[str], now: float
+) -> dict[str, float | None] | None:
+    """Seconds since the newest peer handshake per interface (None: never, or unreadable).
+
+    Peer public keys are deliberately not kept.
+    """
+    ages: dict[str, float | None] = {}
+    for name in interfaces:
+        try:
+            done = subprocess.run(
+                [*wg_command, name, "latest-handshakes"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if done.returncode != 0:
+            return None
+        stamps = []
+        for line in done.stdout.splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[1].isdigit():
+                stamps.append(int(parts[1]))
+        newest = max(stamps, default=0)
+        ages[name] = max(0.0, now - newest) if newest else None
+    return ages
+
+
 def collect_network(
     proc_root: Path = Path("/proc"),
     sys_root: Path = Path("/sys"),
     resolv_conf: Path = Path("/etc/resolv.conf"),
     cert_path: Path | None = None,
     now: float | None = None,
+    wg_command: Sequence[str] = ("wg", "show"),
 ) -> dict[str, Any]:
     """Routing, resolver, WireGuard interface and gateway certificate evidence (None = unknown)."""
     import time
@@ -130,6 +162,7 @@ def collect_network(
         "has_default_route": None,
         "dns_servers": None,
         "wireguard_interfaces": None,
+        "wireguard_handshake_age": None,
         "cert_days_left": None,
     }
     routes = _read(proc_root / "net/route")
@@ -163,6 +196,10 @@ def collect_network(
         )
     except OSError:
         pass
+    if result["wireguard_interfaces"]:
+        result["wireguard_handshake_age"] = _handshake_ages(
+            result["wireguard_interfaces"], wg_command, now or time.time()
+        )
     if cert_path is not None:
         try:
             from cryptography import x509
