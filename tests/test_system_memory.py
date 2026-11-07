@@ -132,3 +132,20 @@ class NetworkTests(unittest.TestCase):
         self.assertTrue(
             all(r.status == Status.UNKNOWN for r in check_network_routes(ctx))
         )
+
+
+class ListenCommandTests(unittest.TestCase):
+    def test_listen_reports_unavailable_without_audio_tools(self) -> None:
+        import contextlib
+        import io
+
+        from kenpi.assistant_cli import main
+        from kenpi.features import FeatureStore
+
+        with tempfile.TemporaryDirectory() as d:
+            FeatureStore(Path(d)).set_enabled("assistant", True)
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                code = main(["--state-directory", d, "listen"])
+        self.assertEqual(code, 1)
+        self.assertIn("unavailable", err.getvalue())

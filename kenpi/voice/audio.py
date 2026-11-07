@@ -255,3 +255,24 @@ def run_listener(
             handle(text)
             handled += 1
     return handled
+
+
+def play_wav(
+    data: bytes, device: str = "", aplay: str = "aplay", timeout: float = 60.0
+) -> None:
+    """Play a WAV through ALSA. Raises AudioUnavailable if playback is not possible."""
+    try:
+        wav_to_pcm(data)
+    except (EOFError, wave.Error) as error:
+        raise ValueError("not a valid WAV") from error
+    if shutil.which(aplay) is None:
+        raise AudioUnavailable("aplay is not installed")
+    argv = [aplay, "-q"] + (["-D", device] if device else []) + ["-"]
+    try:
+        done = subprocess.run(
+            argv, input=data, capture_output=True, timeout=timeout, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise AudioUnavailable(f"playback failed: {type(error).__name__}") from error
+    if done.returncode != 0:
+        raise AudioUnavailable("playback device rejected the audio")

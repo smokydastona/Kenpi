@@ -60,6 +60,14 @@ def main(argv: list[str] | None = None) -> int:
     speak = sub.add_parser("speak", help="synthesize text in the active character")
     speak.add_argument("text")
     speak.add_argument("--output", type=Path, required=True)
+    listen = sub.add_parser(
+        "listen", help="listen on a microphone, answer by voice (runs until stopped)"
+    )
+    listen.add_argument(
+        "--device", default="", help="ALSA capture device (default: first found)"
+    )
+    listen.add_argument("--no-wake-word", action="store_true")
+    listen.add_argument("--list-devices", action="store_true")
     args = parser.parse_args(argv)
 
     if not FeatureStore(args.state_directory).is_enabled("assistant"):
@@ -75,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
         collect_host_health,
         INITIAL_CAPABILITIES,
     )
+    if args.command == "listen":
+        return _listen(assistant, args)
     if args.command == "ask":
         response = assistant.orchestrator.handle(args.text, "cli")
         if args.approve:
@@ -107,6 +117,68 @@ def main(argv: list[str] | None = None) -> int:
         return _voice_command(assistant, args)
     else:
         print(json.dumps(assistant.tools.describe(), indent=2))
+    return 0
+
+
+def _listen(assistant: AssistantService, args: argparse.Namespace) -> int:
+    from kenpi.assistant import AssistantSettings
+    from kenpi.voice.audio import (
+        AlsaCapture,
+        AudioUnavailable,
+        WhisperCppTranscriber,
+        discover_devices,
+        play_wav,
+        run_listener,
+    )
+
+    settings = AssistantSettings.load(
+        args.state_directory / "assistant" / "assistant.toml"
+    )
+    try:
+        devices = discover_devices()
+        if args.list_devices:
+            for device in devices:
+                print(f"{device.id}: {device.description}")
+            return 0
+        device = (
+            args.device or settings.audio_device or (devices[0].id if devices else "")
+        )
+        if not device:
+            raise AudioUnavailable("no capture device found")
+        transcriber = WhisperCppTranscriber(
+            settings.whisper_binary, Path(settings.whisper_model)
+        )
+        if not settings.whisper_model or not transcriber.available():
+            raise AudioUnavailable(
+                "whisper.cpp binary or whisper_model is not configured"
+            )
+    except AudioUnavailable as error:
+        print(
+            f"Voice input unavailable (text-only still works): {error}", file=sys.stderr
+        )
+        return 1
+
+    def handle(text: str) -> None:
+        response = assistant.orchestrator.handle(text, "voice")
+        print(response.message, flush=True)
+        reply = assistant.speak(response.message)
+        if reply.audio is None:
+            return
+        try:
+            play_wav(reply.audio, settings.audio_device)
+        except (AudioUnavailable, ValueError) as error:
+            print(f"(no audio output: {error})", file=sys.stderr)
+
+    wake_words = () if args.no_wake_word else settings.wake_words
+    try:
+        run_listener(
+            AlsaCapture(device).frames(), transcriber.transcribe, handle, wake_words
+        )
+    except AudioUnavailable as error:
+        print(f"Capture stopped: {error}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        return 0
     return 0
 
 

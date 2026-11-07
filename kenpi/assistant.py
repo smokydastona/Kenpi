@@ -85,6 +85,10 @@ class AssistantSettings:
     llm_timeout_seconds: float = 8.0
     llm_allow_remote: bool = False
     llm_api_key: str = ""
+    whisper_binary: str = "whisper-cli"
+    whisper_model: str = ""
+    wake_words: tuple[str, ...] = ("hey kenpi",)
+    audio_device: str = ""
 
     @classmethod
     def load(cls, path: Path) -> "AssistantSettings":

@@ -274,3 +274,14 @@ handler (worker thread, timeout) → verification → rollback on failure. Resul
 and `rolled_back`, and the engine writes each to the diagnostic history. Existing actions
 declare none of these yet, so they run unverified; add them per action when the real operation is
 defined.
+
+## Voice listening (`kenpi-assist listen`)
+
+`kenpi-assist listen` captures from an ALSA device (`arecord`), segments speech
+with an energy VAD, transcribes with whisper.cpp, requires a wake word
+(`wake_words`, default `hey kenpi`; `--no-wake-word` disables), sends the text
+through the normal orchestrator and plays the spoken reply with `aplay`.
+Settings in `assistant.toml`: `whisper_binary`, `whisper_model`, `wake_words`,
+`audio_device`. Without arecord/whisper/model it exits with a clear message;
+text-only use is unaffected. Tested with real subprocess stand-ins only; it has
+not been run against a real microphone, whisper model or speaker.

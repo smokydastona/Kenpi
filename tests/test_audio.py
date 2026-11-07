@@ -12,6 +12,7 @@ from kenpi.voice.audio import (
     contains_wake_word,
     discover_devices,
     pcm_to_wav,
+    play_wav,
     segment_utterances,
     strip_wake_word,
     wav_to_pcm,
@@ -91,6 +92,20 @@ class ToolTests(unittest.TestCase):
     def test_missing_arecord_is_unavailable(self) -> None:
         with self.assertRaises(AudioUnavailable):
             discover_devices("definitely-not-installed")
+
+    def test_play_wav_pipes_audio_to_real_subprocess(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "got.wav"
+            script = Path(d) / "aplay"
+            script.write_text(f"#!/bin/sh\ncat > {out}\n")
+            script.chmod(script.stat().st_mode | stat.S_IEXEC)
+            audio = pcm_to_wav(b"".join(tone(2, 1000)))
+            play_wav(audio, aplay=str(script))
+            self.assertEqual(out.read_bytes(), audio)
+            with self.assertRaises(ValueError):
+                play_wav(b"junk", aplay=str(script))
+            with self.assertRaises(AudioUnavailable):
+                play_wav(audio, aplay="no-such-aplay")
 
     def test_whisper_runs_real_subprocess(self) -> None:
         with tempfile.TemporaryDirectory() as d:
