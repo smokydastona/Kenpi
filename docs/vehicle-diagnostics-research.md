@@ -86,3 +86,42 @@ transceiver driver, no 5-baud/fast init, no timing), no pins are assigned,
 nothing calls `diagnose()` from the assistant, API or UI, and nothing has been
 run against a Heltec board or a car. Full vehicle diagnostics therefore does not
 exist yet; this is the verified Pi/controller message contract it will use.
+
+## Repository links checked on GitHub (2026-11-07)
+
+Existence, licence and last push were read from the GitHub API; the code was not
+reviewed and nothing was tested on a vehicle. "Fit/Jazz 2005" compatibility is
+unestablished for every entry.
+
+| Repository | Licence | Notes |
+|---|---|---|
+| https://github.com/muki01/OBD2_K-line_Reader | GPL-3.0 | ESP32 ISO 9141-2 / 14230 reader |
+| https://github.com/muki01/OBD2_KLine_Library | GPL-3.0 | K-Line library (the `OBD2_K-line_Library` name redirects here) |
+| https://github.com/muki01/OBD2_CAN_Bus_Reader | GPL-3.0 | CAN variant |
+| https://github.com/muki01/OBD2_CAN_Bus_Library | GPL-3.0 | CAN (TWAI) library |
+| https://github.com/muki01/OBD2-Diagnostic-UI | MIT | UI for the above |
+| https://github.com/Artid1994/Honda-K-Line-smart-guage-esp32-project-v1 | none stated | Honda K-Line ESP32 gauge; no licence means no reuse rights |
+| https://github.com/andreibaw/Honda_K-Line_KWP2000 | GPL-3.0 | Honda KWP2000 research |
+| https://github.com/aeaphichart/Honda_K-line | BSD-2-Clause | Honda K-Line |
+| https://github.com/aeaphichart/HondaECU-1 | GPL-3.0 | ECU tool incl. flashing; do not use write functions |
+| https://github.com/roccofz1/HondaECU | GPL-3.0 | K-Line reverse engineering (2018) |
+| https://github.com/kerpz/ArduinoHondaOBD | none stated | Honda to ELM/OBD-II translation; pre-2002 ECUs |
+| https://github.com/kerpz/ArduinoHondaUNI | none stated | its successor |
+| https://github.com/softr8/p30obd | none stated | older P30 ECUs, different connector |
+| https://github.com/VaAndCob/ESP32-Bluetooth-OBD2-Gauge | other | ELM327 gauge |
+| https://github.com/terrafirma2021/ESP32-S3-BLE-ELM327 | GPL-3.0 | BLE ELM327 |
+| https://github.com/Gnzlt/ESP32-S3-Touch-OBD2 | MIT | touch OBD-II gauge |
+| https://github.com/erdemerciyas/ESP32-S3-OBD2 | MIT | ESP32-S3 OBD-II |
+| https://github.com/MagnusThome/RejsaCAN-ESP32 | none stated | CAN board |
+| https://github.com/cozadizzle/esp32-car-tool | none stated | possibly the "ESP32 Car Tool"; unconfirmed |
+| https://github.com/HelTecAutomation/Heltec_ESP32 | NOASSERTION | Heltec board support |
+| https://github.com/Wexter/ESP32-Motronic-4.1-K-Line-diagnostics | none stated | different ECU |
+
+Not found: `theAgingApprentice/HondaECU-1` (404). The Heltec V3 pin numbers
+quoted in the source summary (including the proposed GPIO4/GPIO5 UART) are
+unverified and are not adopted; Kenpi assigns no pin until the board revision
+and pinout are verified.
+
+Licensing: GPL-3.0 code cannot be copied into Kenpi without deciding to relicense
+or isolate it; "none stated" means no permission to copy. Kenpi's own K-Line
+codec is written from the public SAE J1979 / ISO message formats instead.
