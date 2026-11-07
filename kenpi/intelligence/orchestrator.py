@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from kenpi.core.events import EventBus, EventType
+from kenpi.intelligence.approvals import ApprovalStore, PendingApproval
 from kenpi.intelligence.memory import SessionStore
 from kenpi.intelligence.planner import Plan, Planner
 from kenpi.intelligence.tools import PolicyEngine, ToolRegistry
@@ -22,6 +23,7 @@ class Outcome:
     reason: str
     result: dict[str, Any] | None = None
     needs_approval: bool = False
+    approval_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,7 +57,9 @@ class Orchestrator:
         sessions: SessionStore | None = None,
         events: EventBus | None = None,
         character: Callable[[], CharacterVoice] | None = None,
+        approvals: ApprovalStore | None = None,
     ) -> None:
+        self.approvals = approvals or ApprovalStore()
         self._character = character
         self._registry = registry
         self._planner = planner
@@ -82,7 +86,7 @@ class Orchestrator:
                 kind = None
             return self._finish(Response(self._style(kind, plan.clarification), plan))
         outcomes = tuple(
-            self._execute(step.tool, step.args, approved, user_initiated)
+            self._execute(step.tool, step.args, approved, user_initiated, session_id)
             for step in plan.steps
         )
         message = (
@@ -116,8 +120,26 @@ class Orchestrator:
         except Exception:
             return message
 
+    def approve(self, approval_id: str) -> Outcome:
+        """Run exactly the operation that was requested. Only trusted, local callers (the
+        operator CLI or an authenticated on-device UI) may call this; no network route does."""
+        pending = self.approvals.consume(approval_id)
+        if pending is None:
+            return Outcome(
+                "unknown", False, "approval is unknown, expired or already used"
+            )
+        return self._execute(pending.tool, pending.args, True, True, pending.session_id)
+
+    def pending_approvals(self) -> list[PendingApproval]:
+        return self.approvals.list()
+
     def _execute(
-        self, name: str, args: dict[str, Any], approved: bool, user_initiated: bool
+        self,
+        name: str,
+        args: dict[str, Any],
+        approved: bool,
+        user_initiated: bool,
+        session_id: str = "default",
     ) -> Outcome:
         tool = self._registry.get(name)
         if tool is None:
@@ -127,8 +149,15 @@ class Orchestrator:
             return Outcome(name, False, invalid)
         decision = self._policy.decide(tool, approved, user_initiated)
         if not decision.allowed:
+            approval_id = None
+            if decision.needs_approval:
+                approval_id = self.approvals.request(session_id, name, args).approval_id
             return Outcome(
-                name, False, decision.reason, needs_approval=decision.needs_approval
+                name,
+                False,
+                decision.reason,
+                needs_approval=decision.needs_approval,
+                approval_id=approval_id,
             )
         try:
             return Outcome(name, True, decision.reason, tool.handler(args))

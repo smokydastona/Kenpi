@@ -76,9 +76,15 @@ def main(argv: list[str] | None = None) -> int:
         INITIAL_CAPABILITIES,
     )
     if args.command == "ask":
-        response = assistant.orchestrator.handle(
-            args.text, "cli", approved=args.approve
-        )
+        response = assistant.orchestrator.handle(args.text, "cli")
+        if args.approve:
+            # The operator's flag approves exactly the operations just requested.
+            for outcome in response.outcomes:
+                if outcome.approval_id:
+                    result = assistant.orchestrator.approve(outcome.approval_id)
+                    print(
+                        result.result["message"] if result.executed else result.reason
+                    )
         print(json.dumps(response.describe()) if args.json else response.message)
     elif args.command == "diagnose":
         report = assistant.diagnostics.run()
