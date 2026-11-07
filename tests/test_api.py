@@ -8,6 +8,17 @@ from urllib.request import ProxyHandler, build_opener, urlopen
 from kenpi.api.app import KenpiApiService
 
 
+def _ipv6_loopback_usable() -> bool:
+    if not socket.has_ipv6:
+        return False
+    try:
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as probe:
+            probe.bind(("::1", 0))
+    except OSError:
+        return False
+    return True
+
+
 class ApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_shutdown_closes_idle_clients(self) -> None:
         service = KenpiApiService(port=0)
@@ -62,7 +73,7 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
                 connection.close()
             await service.stop()
 
-    @unittest.skipUnless(socket.has_ipv6, "IPv6 is unavailable on this host")
+    @unittest.skipUnless(_ipv6_loopback_usable(), "IPv6 loopback is unavailable")
     async def test_ipv6_loopback_status_and_restart(self) -> None:
         service = KenpiApiService(
             host="::1", port=0, health_check=lambda: {"application_status": "ok"}
