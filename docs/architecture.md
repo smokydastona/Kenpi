@@ -9,8 +9,9 @@ device integrations:
   and operation results that distinguish transmission, response, acknowledgement,
   and independent verification.
 - `kenpi.camera`: transport and codec protocols, explicit command classification,
-  session-provider contract, and an orchestration service that rejects unknown
-  commands and requires user initiation for writes.
+  session-provider contract, an orchestration service that rejects unknown
+  commands and requires user initiation for writes, and a transport-independent
+  lifecycle state machine with explicit recovery and shutdown transitions.
 - `kenpi.video`, `kenpi.media`, `kenpi.kenwood`: transport-independent interfaces
   for live frames, camera files/playback, display, and touch.
 - `kenpi.vehicle`: framed UART messages with length bounds, CRC-16, incremental
@@ -21,8 +22,10 @@ device integrations:
 - `kenpi.services.health`: best-effort Linux memory, storage, and thermal
   readings; unavailable host readings are returned as null, not fabricated.
 
-These are real interfaces and safety checks, not implementations of the
-camera's undocumented protocol, a video decoder, physical UART, full camera
+The camera lifecycle state machine only records caller-reported phases; it does
+not discover, connect to, authenticate with, retry, or shut down a camera
+transport. These are real interfaces and safety checks, not implementations of
+the camera's undocumented protocol, a video decoder, physical UART, full camera
 control UI, or Kenwood display transport. Camera and hardware features remain
 disabled/not verified.
 

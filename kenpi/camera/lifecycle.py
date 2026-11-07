@@ -15,17 +15,100 @@ class CameraState(Enum):
     INITIALIZING = auto()
     ACTIVE = auto()
     STREAMING = auto()
+    CONNECTION_FAILED = auto()
+    AUTHENTICATION_FAILED = auto()
+    RECONNECTING = auto()
+    SESSION_EXPIRED = auto()
+    DEGRADED = auto()
+    SHUTTING_DOWN = auto()
+    SHUTDOWN = auto()
 
 
 class CameraLifecycleStateMachine:
-    """Track camera lifecycle phases without performing device I/O."""
+    """Track camera lifecycle phases without performing device I/O.
+
+    Failure, expiration, and degradation states require explicit caller-driven
+    transitions; entering them never starts a retry or transport operation.
+    """
 
     _ALLOWED_TRANSITIONS = {
-        CameraState.DISCONNECTED: frozenset({CameraState.DISCOVERING}),
-        CameraState.DISCOVERING: frozenset({CameraState.INITIALIZING}),
-        CameraState.INITIALIZING: frozenset({CameraState.ACTIVE}),
-        CameraState.ACTIVE: frozenset({CameraState.STREAMING}),
-        CameraState.STREAMING: frozenset({CameraState.ACTIVE}),
+        CameraState.DISCONNECTED: frozenset(
+            {CameraState.DISCOVERING, CameraState.SHUTTING_DOWN}
+        ),
+        CameraState.DISCOVERING: frozenset(
+            {
+                CameraState.INITIALIZING,
+                CameraState.CONNECTION_FAILED,
+                CameraState.SHUTTING_DOWN,
+            }
+        ),
+        CameraState.INITIALIZING: frozenset(
+            {
+                CameraState.ACTIVE,
+                CameraState.CONNECTION_FAILED,
+                CameraState.AUTHENTICATION_FAILED,
+                CameraState.SHUTTING_DOWN,
+            }
+        ),
+        CameraState.ACTIVE: frozenset(
+            {
+                CameraState.STREAMING,
+                CameraState.CONNECTION_FAILED,
+                CameraState.SESSION_EXPIRED,
+                CameraState.DEGRADED,
+                CameraState.SHUTTING_DOWN,
+            }
+        ),
+        CameraState.STREAMING: frozenset(
+            {
+                CameraState.ACTIVE,
+                CameraState.CONNECTION_FAILED,
+                CameraState.SESSION_EXPIRED,
+                CameraState.DEGRADED,
+                CameraState.SHUTTING_DOWN,
+            }
+        ),
+        CameraState.CONNECTION_FAILED: frozenset(
+            {
+                CameraState.DISCONNECTED,
+                CameraState.RECONNECTING,
+                CameraState.SHUTTING_DOWN,
+            }
+        ),
+        CameraState.AUTHENTICATION_FAILED: frozenset(
+            {
+                CameraState.DISCONNECTED,
+                CameraState.RECONNECTING,
+                CameraState.SHUTTING_DOWN,
+            }
+        ),
+        CameraState.RECONNECTING: frozenset(
+            {
+                CameraState.DISCOVERING,
+                CameraState.CONNECTION_FAILED,
+                CameraState.AUTHENTICATION_FAILED,
+                CameraState.DISCONNECTED,
+                CameraState.SHUTTING_DOWN,
+            }
+        ),
+        CameraState.SESSION_EXPIRED: frozenset(
+            {
+                CameraState.DISCONNECTED,
+                CameraState.RECONNECTING,
+                CameraState.SHUTTING_DOWN,
+            }
+        ),
+        CameraState.DEGRADED: frozenset(
+            {
+                CameraState.ACTIVE,
+                CameraState.STREAMING,
+                CameraState.CONNECTION_FAILED,
+                CameraState.RECONNECTING,
+                CameraState.SHUTTING_DOWN,
+            }
+        ),
+        CameraState.SHUTTING_DOWN: frozenset({CameraState.SHUTDOWN}),
+        CameraState.SHUTDOWN: frozenset(),
     }
 
     def __init__(
@@ -46,10 +129,8 @@ class CameraLifecycleStateMachine:
             return False
         if next_state is self._state:
             return True
-        if (
-            next_state is not CameraState.DISCONNECTED
-            and next_state not in self._ALLOWED_TRANSITIONS[self._state]
-        ):
+        allowed_transitions = self._ALLOWED_TRANSITIONS[self._state]
+        if next_state not in allowed_transitions:
             logger.warning(
                 "Rejected invalid camera lifecycle transition: %s -> %s",
                 self._state.name,
