@@ -117,3 +117,61 @@ this document:
   contains no information about video input modes, touch architecture, or any
   other detail relevant to Kenpi's display/touch integration, so it does not
   change the NOT VERIFIED status above.
+
+## Other smokydastona repositories reviewed (E0, not actioned)
+
+All 19 other public repositories under the `smokydastona` GitHub account were
+reviewed for code reusable toward Gate 1 (camera HTTP/CGI control), Gate 2
+(video stream parsing), or Gate 3 (Kenwood touch/display integration). None
+contain an applicable protocol, driver, or transport layer; every one is
+either a different hardware target or a different problem domain:
+
+- **`joycon-to-keyboard`** — an ESP32 Bluetooth-Classic-HID-to-USB-HID bridge
+  (Joy-Con controller to PC keyboard/mouse/gamepad), plus a PyQt6 "Bind
+  Bandit" helper app with a browser-based WebUSB/WebSerial flasher. This is
+  output-side USB HID emulation for a PC, not input-side capture of a car
+  head unit's touchscreen; its `hotspot_positions.json` defines clickable
+  regions in the helper app's own remapping UI, not touch coordinates read
+  from Kenwood hardware. **Not applicable.**
+- **`Mordecai-AI-Android`** — an AI assistant project with a guarded outbound
+  network layer (`net_proxy/`: domain allowlist, per-minute rate limit,
+  request logging via a `SafeHttpClient`/`PolicyEngine`/`StateStore` stack).
+  Conceptually similar in spirit to the directive's requested "protocol
+  discovery isolation layer," but it is a multi-domain AI-API egress guard,
+  not a camera/head-unit protocol client, and Kenpi's camera control already
+  serializes requests to a single local device with its own evidence gates
+  (`kenpi/camera/control.py`) while `kenpi/tools/redact.py` already covers
+  the directive's packet-capture secrets-redaction requirement. **No code
+  ported** — the problems these two projects solve only partially overlap,
+  and the existing Kenpi mechanisms are already equivalent or stricter for
+  Kenpi's narrower single-device use case.
+- **`minecraft_telemetery`** (Bass Shaker Telemetry) — a Minecraft mod that
+  turns gameplay events into tactile audio for bass shakers. Unrelated
+  domain (game haptics, not vehicle hardware). **Not applicable.**
+- **`dual-cm6206-driver`** / **`cm6206-dual_input_bass-shaker`** — experimental
+  dual-input USB sound-card driver/router projects for bass-shaker audio
+  routing. Unrelated domain (USB audio class driver internals), and Kenpi
+  has no audio subsystem to apply this to. **Not applicable.**
+- **`Solar-LORA-Greenhouse-Automation`** — an ESP32-S3 greenhouse controller
+  (LoRa/MQTT telemetry, vent servos, Wi-Fi setup portal). Different hardware
+  target and problem domain; no 70mai or Kenwood protocol content. Notably
+  uses the same "reality status table" / explicit-implementation-boundary
+  documentation discipline Kenpi already follows, but that is a documentation
+  convention, not code, so there is nothing to port. **Not applicable.**
+- **`Adaptive-Minecraft-Mob-Ai`**, **`Adaptive-Mob-Ai-Fabric_Fork`**,
+  **`adaptive-ai-federation-logs`**, **`PlayerSync-Plus`**, **`KR-MBLEG-RD`**,
+  **`Runa-Waystones`**, **`Runa-Waystones-ServerSide`**,
+  **`Hydraulic-Phlodgate_Add-on`**, **`dead-structures`** — Minecraft
+  mods/add-ons and related ML experiments. Unrelated domain. **Not
+  applicable.**
+- **`S-NDB-UND`**, **`S-NDB-UND-vs-code`** — a standalone sound tool and its
+  VS Code extension. Kenpi has no audio subsystem for this to integrate
+  with, and the tool does not touch any car-hardware protocol. **Not
+  applicable.**
+- **`joycon-to-keyboard`'s** sibling tools, and **`gardening`** — a personal
+  gardening notes repository with no technical overlap. **Not applicable.**
+
+Conclusion: no other `smokydastona` repository contains an HTTP/CGI client
+for 70mai cameras, a video transport/decoder, or a Kenwood touch/display
+protocol implementation. Gates 1–3 remain NOT VERIFIED; this review changed
+no code.
