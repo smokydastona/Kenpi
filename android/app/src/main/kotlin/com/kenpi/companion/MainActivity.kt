@@ -22,10 +22,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -35,6 +33,8 @@ import com.kenpi.companion.ui.GatewayStore
 import com.kenpi.companion.ui.GatewayUiState
 
 class MainActivity : ComponentActivity() {
+    private val store = GatewayStore()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -43,20 +43,26 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    GatewayScreen()
+                    GatewayScreen(store)
                 }
             }
         }
     }
+
+    override fun onStop() {
+        store.accept(GatewayIntent.StopMonitoring)
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        store.close()
+        super.onDestroy()
+    }
 }
 
 @Composable
-private fun GatewayScreen() {
-    val store = remember { GatewayStore() }
+private fun GatewayScreen(store: GatewayStore) {
     val state by store.state.collectAsState()
-    DisposableEffect(store) {
-        onDispose { store.close() }
-    }
 
     Column(
         modifier = Modifier

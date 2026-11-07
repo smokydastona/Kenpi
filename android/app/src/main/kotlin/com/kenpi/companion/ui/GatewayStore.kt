@@ -34,19 +34,24 @@ sealed interface GatewayIntent {
 }
 
 class GatewayStore(
-    private val client: GatewayClient = GatewayClient(),
+    private val fetchSnapshot: suspend (String) -> GatewaySnapshot = GatewayClient()::fetchSnapshot,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val refreshMutex = Mutex()
     private val mutableState = MutableStateFlow(GatewayUiState())
     val state = mutableState.asStateFlow()
 
     private var monitoringJob: Job? = null
+    private var urlRevision = 0L
 
     fun accept(intent: GatewayIntent) {
         when (intent) {
-            is GatewayIntent.UpdateBaseUrl -> mutableState.update {
-                it.copy(baseUrl = intent.value, error = null)
+            is GatewayIntent.UpdateBaseUrl -> {
+                if (mutableState.value.baseUrl != intent.value) {
+                    stopMonitoring()
+                    urlRevision++
+                    mutableState.value = GatewayUiState(baseUrl = intent.value)
+                }
             }
 
             GatewayIntent.StartMonitoring -> startMonitoring()
@@ -65,7 +70,7 @@ class GatewayStore(
         try {
             GatewayClient.normalizeBaseUrl(mutableState.value.baseUrl)
         } catch (error: IllegalArgumentException) {
-            mutableState.update { it.copy(error = error.message) }
+            mutableState.update { it.copy(snapshot = null, lastUpdated = null, error = error.message) }
             return
         }
         mutableState.update { it.copy(isMonitoring = true, error = null) }
@@ -86,18 +91,19 @@ class GatewayStore(
     private suspend fun refreshOnce() {
         refreshMutex.withLock {
             val requestedUrl = mutableState.value.baseUrl
+            val requestedRevision = urlRevision
             val normalizedUrl = try {
                 GatewayClient.normalizeBaseUrl(requestedUrl)
             } catch (error: IllegalArgumentException) {
-                mutableState.update { it.copy(error = error.message) }
+                mutableState.update { it.copy(snapshot = null, lastUpdated = null, error = error.message) }
                 return
             }
 
             mutableState.update { it.copy(isRefreshing = true, error = null) }
             try {
-                val snapshot = client.fetchSnapshot(normalizedUrl)
+                val snapshot = fetchSnapshot(normalizedUrl)
                 mutableState.update { current ->
-                    if (current.baseUrl == requestedUrl) {
+                    if (urlRevision == requestedRevision) {
                         current.copy(
                             snapshot = snapshot,
                             error = null,
@@ -111,14 +117,20 @@ class GatewayStore(
                 throw error
             } catch (error: Exception) {
                 mutableState.update { current ->
-                    if (current.baseUrl == requestedUrl) {
-                        current.copy(error = error.message ?: "Unable to reach the gateway.")
+                    if (urlRevision == requestedRevision) {
+                        current.copy(
+                            snapshot = null,
+                            lastUpdated = null,
+                            error = error.message ?: "Unable to reach the gateway.",
+                        )
                     } else {
                         current
                     }
                 }
             } finally {
-                mutableState.update { it.copy(isRefreshing = false) }
+                if (urlRevision == requestedRevision) {
+                    mutableState.update { it.copy(isRefreshing = false) }
+                }
             }
         }
     }

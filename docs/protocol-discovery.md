@@ -24,3 +24,29 @@ For each observation, record date, camera model/revision, firmware, app version,
 network topology, capture method, redactions, request/response framing, observed
 result, independent read-back, evidence level, and reproducibility. Do not
 commit raw credentials, tokens, private video, or GPS data.
+
+## Discovery performed and external blocker
+
+The official [A810 Lite product page](https://www.70mai.com/global/a810lite/)
+and [DR2860 A810 Lite manual](https://cdn-www.70mai.com/instructions/a810lite/DR2860-4KDashCamA810Lite-print_ML_20260130.pdf)
+were located as research references. Direct retrieval failed with DNS errors.
+No official independent-client command/authentication/stream specification was
+established, and this repository contains no actual A810 Lite traffic captures.
+Official-app Wi-Fi connectivity is not an independent-client protocol contract.
+
+This prevents honest implementation of discovery, pairing, camera settings,
+recording state/control, storage enumeration, preview reception, and camera
+media retrieval. A generic network client or guessed RTSP/HTTP URL would not
+resolve that blocker. No A810 protocol is substituted for A810 Lite behavior.
+
+The command service now supplies tested policy enforcement, not a production
+camera driver: E4 minimum evidence, explicit payload validation, serialization,
+bounded requests, optional session validation, and conservative outcomes.
+Acknowledgement and independent read-back remain separate from a response.
+No runtime test mode, fake camera, or automatic write retry is connected.
+
+To supply usable evidence, perform the official-app connection on a stationary
+bench, capture only authorized device traffic, record one operation at a time,
+and correlate responses with camera-side observations. Include firmware and
+hardware revisions and independent restoration of each reversible setting.
+Keep original captures private; publish reviewed redacted protocol findings.

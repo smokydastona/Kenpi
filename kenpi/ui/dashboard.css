@@ -17,6 +17,8 @@ article h2 { font-size: 1.1rem; margin: 0 0 .4rem; }
 .blocked, .unsupported { color: #ffbf69; }
 .not_verified { color: #ffd166; }
 .available { color: #8ee3a1; }
+dl { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+dd { margin: 0; overflow-wrap: anywhere; }
 a { color: #9bd5ff; }
 
 @media (max-width: 480px) {

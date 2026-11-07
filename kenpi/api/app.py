@@ -5,12 +5,17 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import logging
+import socket
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from typing import Callable
 
 from kenpi.core.capabilities import Capability, INITIAL_CAPABILITIES
 from kenpi.services.health import collect_host_health
+
+logger = logging.getLogger(__name__)
 
 
 def capability_payload(capabilities: tuple[Capability, ...]) -> dict[str, object]:
@@ -43,7 +48,7 @@ class KenpiApiService:
             raise ValueError("API host must be a loopback IP address") from exc
         if not address.is_loopback:
             raise ValueError("unauthenticated API must bind to loopback")
-        if not 0 <= port <= 65535:
+        if type(port) is not int or not 0 <= port <= 65535:
             raise ValueError("API port must be between 0 and 65535")
         self._host = host
         self._port = port
@@ -70,6 +75,16 @@ class KenpiApiService:
         }
 
         class Handler(BaseHTTPRequestHandler):
+            def handle(self) -> None:
+                try:
+                    super().handle()
+                except (ConnectionError, TimeoutError):
+                    logger.debug("Local status client disconnected or timed out")
+                except OSError as exc:
+                    logger.warning(
+                        "Local status request failed: %s", type(exc).__name__
+                    )
+
             def do_GET(self) -> None:
                 asset = assets.get(self.path)
                 if asset is not None:
@@ -78,19 +93,27 @@ class KenpiApiService:
                     self._send(200, body, content_type)
                 elif self.path == "/healthz":
                     try:
-                        self._send_json(200, health_check())
+                        body = self._encode_json(health_check())
                     except Exception:
+                        logger.warning("Host health collection failed")
                         self._send_json(503, {"application_status": "degraded"})
+                    else:
+                        self._send(200, body, "application/json; charset=utf-8")
                 elif self.path == "/api/v1/capabilities":
                     self._send_json(200, capability_payload(capabilities))
                 else:
                     self._send_json(404, {"error": "not_found"})
 
             def _send_json(self, status: int, value: dict[str, object]) -> None:
-                body = json.dumps(
+                self._send(
+                    status, self._encode_json(value), "application/json; charset=utf-8"
+                )
+
+            @staticmethod
+            def _encode_json(value: dict[str, object]) -> bytes:
+                return json.dumps(
                     value, separators=(",", ":"), ensure_ascii=True
                 ).encode("utf-8")
-                self._send(status, body, "application/json; charset=utf-8")
 
             def _send(self, status: int, body: bytes, content_type: str) -> None:
                 self.send_response(status)
@@ -110,12 +133,53 @@ class KenpiApiService:
                 return
 
         class LocalServer(ThreadingHTTPServer):
+            address_family = socket.AF_INET6 if ":" in self._host else socket.AF_INET
             daemon_threads = True
             allow_reuse_address = True
+
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                self._slots = threading.BoundedSemaphore(16)
+                self._requests: set[socket.socket] = set()
+                self._requests_lock = threading.Lock()
+                super().__init__(*args, **kwargs)
+
+            def shutdown_request(self, request: socket.socket) -> None:
+                with self._requests_lock:
+                    self._requests.discard(request)
+                super().shutdown_request(request)
+
+            def server_close(self) -> None:
+                super().server_close()
+                with self._requests_lock:
+                    requests = tuple(self._requests)
+                for request in requests:
+                    self.shutdown_request(request)
+
+            def process_request(
+                self, request: socket.socket, client_address: object
+            ) -> None:
+                if not self._slots.acquire(blocking=False):
+                    self.shutdown_request(request)
+                    return
+                try:
+                    super().process_request(request, client_address)
+                except BaseException:
+                    self._slots.release()
+                    raise
+
+            def process_request_thread(
+                self, request: socket.socket, client_address: object
+            ) -> None:
+                try:
+                    super().process_request_thread(request, client_address)
+                finally:
+                    self._slots.release()
 
             def get_request(self) -> tuple[object, object]:
                 request, client_address = super().get_request()
                 request.settimeout(5.0)
+                with self._requests_lock:
+                    self._requests.add(request)
                 return request, client_address
 
         self._server = LocalServer((self._host, self._port), Handler)

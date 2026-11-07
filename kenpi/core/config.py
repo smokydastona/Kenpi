@@ -30,7 +30,7 @@ class KenpiConfig:
         if not isinstance(self.api_host, str):
             raise ConfigurationError("api_host must be an IP address")
         try:
-            ipaddress.ip_address(self.api_host)
+            address = ipaddress.ip_address(self.api_host)
         except ValueError as exc:
             raise ConfigurationError("api_host must be an IP address") from exc
         if type(self.api_port) is not int or not 1 <= self.api_port <= 65535:
@@ -52,12 +52,9 @@ class KenpiConfig:
             raise ConfigurationError(
                 "camera and vehicle transports are not implemented"
             )
-        if self.environment == "production" and self.api_host not in {
-            "127.0.0.1",
-            "::1",
-        }:
+        if not address.is_loopback:
             raise ConfigurationError(
-                "production API must bind to loopback until authentication is configured"
+                "unauthenticated API must bind to loopback in every environment"
             )
 
 
