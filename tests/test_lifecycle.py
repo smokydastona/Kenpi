@@ -157,8 +157,11 @@ class CameraLifecycleStateMachineTests(unittest.TestCase):
 
     def test_shutdown_cannot_skip_graceful_phase(self) -> None:
         self.assertFalse(self.machine.transition_to(CameraState.SHUTDOWN))
-        self.assertFalse(self.machine.transition_to(CameraState.DISCOVERING))
         self.assertIs(self.machine.current_state, CameraState.DISCONNECTED)
+        self.assertTrue(self.machine.transition_to(CameraState.SHUTTING_DOWN))
+        self.assertTrue(self.machine.transition_to(CameraState.SHUTDOWN))
+        self.assertFalse(self.machine.transition_to(CameraState.DISCOVERING))
+        self.assertIs(self.machine.current_state, CameraState.SHUTDOWN)
 
     def test_repeating_current_state_is_idempotent(self) -> None:
         self.assertTrue(self.machine.transition_to(CameraState.DISCONNECTED))
