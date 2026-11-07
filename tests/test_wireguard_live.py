@@ -43,7 +43,7 @@ def sh(*cmd, ns=None, check=True, env=None, timeout=60, **kw):
             "id; ls -laR " + str(REPO.parent / "x") + " 2>&1 | head -0; "
             "ls -laZ /tmp/kenpi-livewg-* 2>&1 | head -30; "
             "ls -la /tmp/kenpi-livewg-*/state/gateway/wireguard 2>&1; "
-            "findmnt -T /tmp 2>&1; aa-status 2>&1 | head -3",
+            "findmnt -T /tmp 2>&1; aa-status 2>&1 | grep -i -E \"wg|wire|python|bash\"; dmesg 2>&1 | grep -i denied | tail -5; head -c0 /tmp/kenpi-livewg-*/state/gateway/wireguard/wg-kenpi.conf 2>&1; cat /tmp/kenpi-livewg-*/state/gateway/wireguard/wg-kenpi.conf | sed -n 1,3p | cut -c1-12",
             shell=True, capture_output=True, text=True,
         ).stdout  # fmt: skip
         result.stderr += "\n--- diagnostics ---\n" + diag
