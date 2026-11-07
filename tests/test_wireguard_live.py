@@ -34,10 +34,15 @@ ENABLED = os.environ.get("KENPI_LIVE_WG") == "1" and os.geteuid() == 0 and TOOLS
 
 def sh(*cmd, ns=None, check=True, env=None, timeout=60, **kw):
     argv = ["ip", "netns", "exec", ns, *cmd] if ns else list(cmd)
-    return subprocess.run(
-        argv, check=check, capture_output=True, text=True, timeout=timeout,
+    result = subprocess.run(
+        argv, check=False, capture_output=True, text=True, timeout=timeout,
         env={**os.environ, **(env or {})}, cwd=REPO, **kw,
     )  # fmt: skip
+    if check and result.returncode:
+        raise RuntimeError(
+            f"{argv} exited {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+    return result
 
 
 def wait_for(predicate, timeout=20.0, interval=0.4, what="condition"):
