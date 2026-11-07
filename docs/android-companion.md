@@ -68,3 +68,11 @@ interop tests, lint, debug and release APK builds with SHA-256 checksums (upload
 and an emulator job that installs the debug APK, launches `MainActivity` and fails on a crash.
 The release APK is unsigned (no signing config exists) and is not installable as is. The workflow
 has not yet been run; its first run is the first real verification of the `:app` module.
+
+## Voice on the phone
+
+The Assistant tab uses Android's built-in `RecognizerIntent` (Speak button; the
+transcript fills the text box and is only sent after you press Send) and
+`TextToSpeech` (optional "Read replies aloud"). No extra dependencies or
+permissions. **Not compiled or run**: it needs the Android CI job (see CI above).
+If the phone has no recognizer or TTS engine the UI says so.
