@@ -82,6 +82,9 @@ class CompanionRegistry:
         }
         return len(kept)
 
+    def latest_lines(self, device_id: str) -> list[str]:
+        return list(self._reports.get(device_id, {}).get("lines", []))
+
     def evidence(self) -> dict[str, Any]:
         """Diagnostic view: live presence plus each phone's last report."""
         connected = self.connected()

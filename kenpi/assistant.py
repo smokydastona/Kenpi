@@ -17,6 +17,7 @@ from typing import Any, Callable
 from kenpi.companion import CompanionRegistry, redact
 from kenpi.core.events import EventBus, EventType
 from kenpi.core.permissions import Permission
+from kenpi.diagnostics.ingest import JournalUnavailable, LogStore, read_journal
 from kenpi.diagnostics.engine import DiagnosticsEngine
 from kenpi.diagnostics.history import DiagnosticHistory
 from kenpi.diagnostics.models import DiagnosticContext, Status
@@ -78,6 +79,7 @@ class AssistantSettings:
     openvoice_allow_remote: bool = False
     chatterbox_url: str = ""
     llm_url: str = ""
+    journal_units: tuple[str, ...] = ("kenpi-status.service",)
     llm_model: str = ""
     llm_timeout_seconds: float = 8.0
     llm_allow_remote: bool = False
@@ -124,6 +126,7 @@ class AssistantService:
         self._events = events
         self._data_dir = data_dir
         self._log_ring = LogRing()
+        self.log_store = LogStore()
         self._running = False
         settings = settings or (
             AssistantSettings.load(data_dir / "assistant.toml")
@@ -131,6 +134,7 @@ class AssistantService:
             else AssistantSettings()
         )
         models_dir = data_dir / "models" if data_dir else None
+        self._journal_units = tuple(settings.journal_units)
 
         engines = EngineRegistry()
         for engine_class, url in (
@@ -164,7 +168,7 @@ class AssistantService:
             capabilities=evidence,
             voice_status=self.voice.status,
             companion=self.companion.evidence,
-            log_lines=self._log_ring.lines,
+            log_lines=self._observed_logs,
         )
         remediation = RemediationRegistry()
         if data_dir is not None:
@@ -270,6 +274,14 @@ class AssistantService:
     def speak(self, text: str):
         return self.voice.speak(text, self.character.id)
 
+    def _observed_logs(self) -> list[str]:
+        """Evidence for the analyzer: in-process lines plus the journal, both observed by Kenpi."""
+        try:
+            self.log_store.add_records(read_journal(self._journal_units, 200))
+        except (JournalUnavailable, ValueError) as error:
+            logger.debug("Journal not ingested: %s", error)
+        return self._log_ring.lines() + self.log_store.analyzer_lines()
+
     @staticmethod
     def _build_provider(settings: AssistantSettings) -> ChatCompletionsProvider | None:
         if not settings.llm_url:
@@ -339,6 +351,9 @@ class AssistantService:
                 }
             if method == "POST" and path == "/api/v1/assistant/logs":
                 kept = self.companion.report(device_id, device_name, body)
+                self.log_store.ingest(
+                    "android", self.companion.latest_lines(device_id), dedupe=True
+                )
                 return 200, {"accepted": kept}
             if method == "POST" and path == "/api/v1/assistant/ask":
                 text = body.get("text")
@@ -471,6 +486,16 @@ class AssistantService:
             names = ", ".join(c.name for c in CHARACTERS)
             return {"message": f"Available characters: {names}."}
 
+        def search_logs(args: dict[str, Any]) -> dict[str, Any]:
+            self._observed_logs()
+            hits = self.log_store.search(args["query"], limit=10)
+            if not hits:
+                return {"message": "No matching log records.", "records": []}
+            return {
+                "message": f"Found {len(hits)} matching record(s); latest: {hits[-1].message[:120]}",
+                "records": [h.describe() for h in hits],
+            }
+
         def setup_help(_: dict[str, Any]) -> dict[str, Any]:
             steps = self.setup_steps()
             pending = [t for _, done, t in steps if done is not True]
@@ -541,6 +566,9 @@ class AssistantService:
                 A,
                 set_character,
                 {"character": str},
+            ),
+            Tool(
+                "search_logs", "Search diagnostic logs", A, search_logs, {"query": str}
             ),
             Tool("setup_help", "Guide the next setup step", A, setup_help),
             Tool("list_characters", "List assistant characters", A, list_characters),

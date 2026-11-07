@@ -46,6 +46,7 @@ _RULES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
     (re.compile(pattern, re.I), tool)
     for pattern, tool in (
         (r"\b(stop|disable|pause|turn off|end)\b.*\brecord", "stop_recording"),
+        (r"\b(search|find|grep|look)\b.*\blogs?\b", "search_logs"),
         (
             r"\bset ?up\b|\bget(ting)? started\b|\bfirst time\b|\b(pair|connect)\b.*\b(phone|app)\b",
             "setup_help",
@@ -145,6 +146,11 @@ class Planner:
                     {"tool": tool, "args": args, "missing": "camera"},
                 )
             return Plan((PlanStep(tool, args),), 0.8)
+        if tool == "search_logs":
+            match = re.search(r"\bfor\s+([\w.:\-/ ]{1,64})$", text.strip(), re.I)
+            if match is None:
+                return Plan((), 0.5, "What should I search the logs for?")
+            return Plan((PlanStep(tool, {"query": match.group(1).strip()}),), 0.8)
         if tool == "set_preference":
             lowered = text.lower()
             key = next((v for k, v in _PREFERENCE_KEYS.items() if k in lowered), None)

@@ -227,3 +227,14 @@ timeout, error or malformed reply falls back to the rule-based answer.
 
 Tested against a real local HTTP server speaking the chat-completions protocol, not against an actual
 language model: model quality, latency on a Pi 5 and multi-turn history are **not** evaluated or implemented.
+
+## Log ingestion
+
+`kenpi/diagnostics/ingest.py` keeps up to 5000 timestamped, secret-redacted records labelled by source
+(`app`, `journal`, `gateway`, `android`, `firmware`, `voice`, `network`). Today the following are actually
+wired: in-process app logs, the systemd journal for `journal_units` (default `kenpi-status.service`, read with
+`journalctl -o json`; if it is missing or fails the journal is simply not ingested and that is logged), and
+phone logs uploaded by the companion. `gateway`, `firmware`, `voice` and `network` are accepted source labels
+but have no automatic collector yet. Phone (`android`) records are searchable but flagged untrusted and are
+excluded from the fault analyzer, so a phone cannot create a Kenpi fault by sending crafted lines. Ask
+"search the logs for <text>" (read-only `search_logs` tool).
