@@ -91,9 +91,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y wireguard-tools wireguard-go openssh-server iproute2
           python -m pip install '.[dev]' cryptography
-      - name: Unload Ubuntu's wg-quick AppArmor profile
+      - name: Unload Ubuntu's wg and wg-quick AppArmor profiles
         # The profile denies reading configs outside /etc/wireguard; the test keeps them in a temp state dir.
-        run: sudo apparmor_parser -R /etc/apparmor.d/wg-quick
+        run: sudo apparmor_parser -R /etc/apparmor.d/wg-quick /etc/apparmor.d/wg
       - name: Real OpenSSH SFTP tests
         run: python -m unittest tests.test_sftp_live -v
       - name: Real WireGuard tunnel tests
