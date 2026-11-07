@@ -23,7 +23,7 @@ install -d -m 0755 "$release/source"
 
 # Export exactly the pinned commit, not the working tree, so the image matches
 # a reviewed, committed snapshot rather than uncommitted local changes.
-git -C "$KENPI_REPO" archive "$KENPI_COMMIT" | tar -x -C "$release/source"
+git -c safe.directory="$KENPI_REPO" -C "$KENPI_REPO" archive "$KENPI_COMMIT" | tar -x -C "$release/source"
 
 install -d -m 0750 "${ROOTFS_DIR}/etc/kenpi"
 install -m 0640 "$release/source/deploy/status.toml" "${ROOTFS_DIR}/etc/kenpi/status.toml"
