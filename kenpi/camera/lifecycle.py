@@ -123,7 +123,7 @@ class CameraLifecycleStateMachine:
         return self._state
 
     def transition_to(self, next_state: CameraState, reason: str = "") -> bool:
-        """Transition to an allowed phase; any phase can reset to disconnected."""
+        """Transition to a phase explicitly allowed from the current state."""
         if not isinstance(next_state, CameraState):
             logger.warning("Rejected invalid camera lifecycle state: %r", next_state)
             return False
