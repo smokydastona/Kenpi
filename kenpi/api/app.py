@@ -1,4 +1,4 @@
-"""Loopback-only read-only HTTP API for health and verified capabilities."""
+"""Loopback-only, read-only HTTP API: health, capabilities, status, events, media."""
 
 from __future__ import annotations
 
@@ -14,8 +14,10 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from typing import Callable
+from urllib.parse import parse_qs
 
 from kenpi.core.capabilities import Capability, INITIAL_CAPABILITIES
+from kenpi.core.events import EventBus
 from kenpi.headunit.profiles import list_profiles
 from kenpi.media.library import LocalMediaLibrary, MediaError
 from kenpi.services.health import collect_host_health
@@ -64,7 +66,7 @@ class _TokenBucket:
 
 
 class KenpiApiService:
-    """A read-only local API; no command or media routes are exposed."""
+    """A read-only local API. Every route is GET; there are no command or write routes."""
 
     def __init__(
         self,
@@ -77,6 +79,7 @@ class KenpiApiService:
         vehicle_provider: Callable[[], dict[str, object]] | None = None,
         media_library: LocalMediaLibrary | None = None,
         safe_mode: bool = False,
+        events: EventBus | None = None,
     ) -> None:
         try:
             address = ipaddress.ip_address(host)
@@ -95,6 +98,7 @@ class KenpiApiService:
         self._vehicle_provider = vehicle_provider
         self._media_library = media_library
         self._safe_mode = safe_mode
+        self._events = events
         self._server: ThreadingHTTPServer | None = None
         self._server_task: asyncio.Task[None] | None = None
 
@@ -114,6 +118,7 @@ class KenpiApiService:
         vehicle_provider = self._vehicle_provider
         media_library = self._media_library
         safe_mode = self._safe_mode
+        events = self._events
         limiter = _TokenBucket(rate_per_second=50.0, burst=100)
         started_at_monotonic = time.monotonic()
         started_at_iso = datetime.now(timezone.utc).isoformat()
@@ -240,6 +245,20 @@ class KenpiApiService:
                             "status": build_status_payload(),
                         },
                     )
+                elif path == "/api/v1/events":
+                    if events is None:
+                        self._send_json(503, {"error": "events_unavailable"})
+                    else:
+                        query = parse_qs(self.path.partition("?")[2])
+                        try:
+                            after = int(query.get("after", ["0"])[0])
+                            limit = int(query.get("limit", ["100"])[0])
+                            if after < 0 or not 1 <= limit <= 500:
+                                raise ValueError
+                        except ValueError:
+                            self._send_json(400, {"error": "bad_query"})
+                        else:
+                            self._send_json(200, events.events_after(after, limit))
                 elif self.path == "/api/v1/status":
                     self._send_json(200, build_status_payload())
                 else:

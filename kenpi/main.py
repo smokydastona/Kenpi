@@ -1,4 +1,4 @@
-"""Command-line entry point for the read-only local status service."""
+"""Command-line entry point for the read-only local status service (GET routes only)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pathlib import Path
 
 from kenpi.api.app import KenpiApiService
 from kenpi.core.config import load_config
+from kenpi.core.events import EventBus, EventType
 from kenpi.core.safemode import DEFAULT_MARKER, safe_mode_requested
 from kenpi.media.library import LocalMediaLibrary
 from kenpi.services.coordinator import ServiceCoordinator
@@ -20,8 +21,10 @@ logger = logging.getLogger(__name__)
 
 async def _serve(config_path: Path, safe_mode: bool = False) -> None:
     config = load_config(config_path)
+    events = EventBus()
     if safe_mode:
         logger.warning("Safe mode: vehicle link and media library are not started")
+        events.publish(EventType.SAFE_MODE_ENTERED, "main")
     # The API service needs a reference to the coordinator for its status endpoint, but the
     # coordinator needs the already-constructed service. Resolve the cycle with a one-element
     # list that is filled immediately after construction, before the service can ever be
@@ -33,6 +36,7 @@ async def _serve(config_path: Path, safe_mode: bool = False) -> None:
         link = VehicleLinkService(
             VehicleCoordinator(config.vehicle_heartbeat_timeout_seconds),
             lambda: SerialPort(device, baud),
+            events=events,
         )
     library: LocalMediaLibrary | None = None
     if config.media_directory and not safe_mode:
@@ -45,12 +49,15 @@ async def _serve(config_path: Path, safe_mode: bool = False) -> None:
         config.api_port,
         head_unit=config.head_unit,
         safe_mode=safe_mode,
+        events=events,
         status_provider=lambda: coordinator_ref[0].describe(),
         media_library=library,
         vehicle_provider=(lambda: link.snapshot().describe()) if link else None,
     )
     # The link starts first so the API never reports a link that is not running.
-    coordinator = ServiceCoordinator((link, service) if link else (service,))
+    coordinator = ServiceCoordinator(
+        (link, service) if link else (service,), events=events
+    )
     coordinator_ref.append(coordinator)
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -65,6 +72,7 @@ async def _serve(config_path: Path, safe_mode: bool = False) -> None:
     finally:
         try:
             await coordinator.stop()
+            events.close()
             logger.info("Local status service stopped")
         finally:
             for signum in installed_signals:

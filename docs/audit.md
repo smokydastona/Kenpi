@@ -8,8 +8,8 @@ is skipped where `::1` cannot be bound.
 
 | Area | State |
 | --- | --- |
-| `kenpi/main.py`, `services/coordinator.py` | Working. Starts only the loopback API; coordinator rolls back on partial startup. |
-| `kenpi/api/app.py`, `ui/` | Working, read-only: `/`, static assets, `/healthz`, `/api/v1/capabilities`. No command, media or WebSocket routes. |
+| `kenpi/main.py`, `services/coordinator.py` | Working. Starts the loopback API, plus the vehicle link when configured; coordinator rolls back on partial startup and publishes lifecycle events. |
+| `kenpi/api/app.py`, `ui/` | Working, GET-only: `/`, static assets, `/healthz` and `/api/v1/{capabilities,status,camera,preview,vehicle,media,diagnostics,head-units,events}`. Media routes serve the local library only. No camera command, write, WebSocket or authentication routes exist. |
 | `core/config.py` | Strict TOML loader. Rejects `camera_enabled` and `vehicle_uart_enabled` as unimplemented and any non-loopback bind. |
 | `core/capabilities.py` | Every hardware capability is `BLOCKED`/`NOT_VERIFIED` at E0. `AVAILABLE` requires E4 or higher. |
 | `camera/lifecycle.py` | State machine that records caller-reported phases only; no I/O. |

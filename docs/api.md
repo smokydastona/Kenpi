@@ -10,6 +10,7 @@ and sockets time out after 10 s. A disabled capability returns a structured
 | `/healthz` | Host health; `503` when collection fails. |
 | `/api/v1/capabilities` | Declared capabilities with state and evidence level. |
 | `/api/v1/status` | Version, uptime, coordinator state. |
+| `/api/v1/events?after=<seq>&limit=<1-500>` | Replay of the in-process event ring (`events`, `latest_seq`, `oldest_seq`, `gap`). Poll with the last seen `seq`; `gap: true` means older events were evicted. 503 if no bus. |
 | `/api/v1/diagnostics` | Version, selected head unit, `safe_mode`, capability states, status. |
 | `/api/v1/head-units` | Head-unit profiles (all unverified) and the selected key. |
 | `/api/v1/camera` | Disabled: no verified A810 Lite protocol. |

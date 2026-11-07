@@ -18,6 +18,7 @@ from enum import Enum
 from typing import Awaitable, Callable, Protocol
 
 from kenpi.core.errors import ProtocolError
+from kenpi.core.events import EventBus, EventType
 from kenpi.vehicle.messages import (
     Heartbeat,
     PowerState,
@@ -159,7 +160,9 @@ class VehicleLinkService:
         coordinator: VehicleCoordinator,
         opener: Callable[[], ByteStream],
         shutdown_handler: ShutdownHandler | None = None,
+        events: EventBus | None = None,
     ) -> None:
+        self._events = events
         self._coordinator = coordinator
         self._opener = opener
         self._shutdown_handler = shutdown_handler
@@ -188,13 +191,32 @@ class VehicleLinkService:
         if stream is not None:
             stream.close()
 
+    def _publish(self, kind: EventType, **data: object) -> None:
+        if self._events is not None:
+            self._events.publish(kind, "VehicleLinkService", **data)
+
     async def _run(self, stream: ByteStream) -> None:
+        connected = False
+        power: PowerState | None = None
         while True:
             chunk = await stream.read()
             if not chunk:
                 logger.warning("Vehicle link closed by peer")
+                if connected:
+                    self._publish(EventType.CONTROLLER_DISCONNECTED)
                 return
-            for request in self._coordinator.ingest(chunk):
+            requests = self._coordinator.ingest(chunk)
+            snapshot = self._coordinator.snapshot()
+            if not connected and snapshot.link_state is LinkState.CONNECTED:
+                connected = True
+                self._publish(EventType.CONTROLLER_CONNECTED)
+            if snapshot.power_state is not None and snapshot.power_state != power:
+                power = snapshot.power_state
+                self._publish(EventType.POWER_STATE_CHANGED, state=power.name.lower())
+            for request in requests:
+                self._publish(
+                    EventType.SHUTDOWN_REQUESTED, grace_seconds=request.grace_seconds
+                )
                 await self._answer(stream, request)
 
     async def _answer(self, stream: ByteStream, request: ShutdownRequest) -> None:
