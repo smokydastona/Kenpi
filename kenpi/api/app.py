@@ -16,6 +16,7 @@ from importlib.resources import files
 from typing import Callable
 
 from kenpi.core.capabilities import Capability, INITIAL_CAPABILITIES
+from kenpi.headunit.profiles import list_profiles
 from kenpi.services.health import collect_host_health
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ class KenpiApiService:
         capabilities: tuple[Capability, ...] = INITIAL_CAPABILITIES,
         health_check: Callable[[], dict[str, object]] | None = None,
         status_provider: Callable[[], dict[str, object]] | None = None,
+        head_unit: str = "kenwood-dmx5710s",
     ) -> None:
         try:
             address = ipaddress.ip_address(host)
@@ -64,6 +66,7 @@ class KenpiApiService:
         self._capabilities = capabilities
         self._health_check = health_check or collect_host_health
         self._status_provider = status_provider
+        self._head_unit = head_unit
         self._server: ThreadingHTTPServer | None = None
         self._server_task: asyncio.Task[None] | None = None
 
@@ -79,6 +82,7 @@ class KenpiApiService:
         capabilities = self._capabilities
         health_check = self._health_check
         status_provider = self._status_provider
+        selected_head_unit = self._head_unit
         started_at_monotonic = time.monotonic()
         started_at_iso = datetime.now(timezone.utc).isoformat()
 
@@ -130,6 +134,11 @@ class KenpiApiService:
                         self._send(200, body, "application/json; charset=utf-8")
                 elif self.path == "/api/v1/capabilities":
                     self._send_json(200, capability_payload(capabilities))
+                elif self.path == "/api/v1/head-units":
+                    self._send_json(
+                        200,
+                        {"selected": selected_head_unit, "head_units": list_profiles()},
+                    )
                 elif self.path == "/api/v1/status":
                     self._send_json(200, build_status_payload())
                 else:

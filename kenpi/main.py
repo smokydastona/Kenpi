@@ -25,6 +25,7 @@ async def _serve(config_path: Path) -> None:
     service = KenpiApiService(
         config.api_host,
         config.api_port,
+        head_unit=config.head_unit,
         status_provider=lambda: coordinator_ref[0].describe(),
     )
     coordinator = ServiceCoordinator((service,))

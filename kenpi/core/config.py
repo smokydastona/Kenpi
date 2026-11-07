@@ -19,8 +19,15 @@ class KenpiConfig:
     camera_enabled: bool = False
     camera_request_timeout_seconds: float = 3.0
     vehicle_uart_enabled: bool = False
+    head_unit: str = "kenwood-dmx5710s"
 
     def __post_init__(self) -> None:
+        from kenpi.headunit.profiles import get_profile
+
+        try:
+            get_profile(self.head_unit)
+        except ValueError as exc:
+            raise ConfigurationError(str(exc)) from exc
         if not isinstance(self.environment, str):
             raise ConfigurationError("environment must be a string")
         if self.environment not in {"production", "development", "test"}:
