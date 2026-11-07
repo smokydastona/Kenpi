@@ -90,3 +90,7 @@ status, lifecycle, and deployment work is implemented without enabling those
 blocked paths.
 
 See also [research corpus](research-corpus.md).
+
+## Decision records
+
+See [docs/adr/](adr/README.md) for the accepted designs for WebSocket push, Android pairing, the WireGuard remote gateway and backup/restore. They are design only; none is implemented.

@@ -13,10 +13,10 @@ HARDWARE-VERIFIED (never reached, nothing is above E0), BLOCKED (needs evidence)
 | Release bundle, OS image | Built in CI; not booted on hardware |
 | Camera transport, session, commands | Safety gate only; BLOCKED (no A810 Lite evidence) |
 | Live preview | Buffer only; BLOCKED |
-| WebSocket push | NOT IMPLEMENTED |
-| Android pairing, per-device credentials | NOT IMPLEMENTED |
-| Authenticated remote gateway | NOT IMPLEMENTED |
-| Backup/restore | NOT IMPLEMENTED |
+| WebSocket push | NOT IMPLEMENTED (design: ADR 0001) |
+| Android pairing, per-device credentials | NOT IMPLEMENTED (ADR 0002) |
+| Authenticated remote gateway (WireGuard) | NOT IMPLEMENTED (ADR 0003) |
+| Backup/restore | NOT IMPLEMENTED (ADR 0004) |
 | Kenwood DMX5710S display/touch | BLOCKED, unverified |
 
 Verdict: **NOT PRODUCTION READY**. Nothing is hardware-verified.
