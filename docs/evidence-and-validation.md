@@ -104,3 +104,7 @@ lifecycle overrides and privileged installer trust-boundary flaws. Root-owned
 deployment metadata and immutable release parents now separate privileged
 installation from unprivileged builds. Physical installation, reboot behavior,
 firmware, and all three hardware gates remain unverified.
+
+## Implementation register
+
+`validation/register.toml` lists every capability with implementation status, host test files and evidence level. `python -m kenpi.tools.register` (also run by the test suite) fails if a register entry disagrees with the runtime capabilities, references a missing test, omits what is missing for an incomplete capability, or claims E4+ without `evidence_ref`.
