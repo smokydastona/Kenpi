@@ -254,3 +254,14 @@ certificate: CPU load, swap, throttling/under-voltage, USB devices, default rout
 resolvers, WireGuard interfaces and certificate days remaining. Unreadable sources report
 `unknown`. Not yet covered: live DNS resolution, DHCP lease state, WireGuard peer handshakes,
 filesystem errors and storage health.
+
+## Audio input (`kenpi/voice/audio.py`)
+
+Provided: mono 16-bit WAV validation, an energy-based voice activity detector, ALSA capture
+device discovery and capture through `arecord`, a `whisper.cpp` CLI transcriber, a transcript-based
+wake-word gate and `run_listener`, which ties them together. Everything raises `AudioUnavailable`
+when its tool or device is missing; text-only operation is unaffected.
+
+Not done: no systemd listener service is wired up yet, playback (`aplay`) is not implemented, the
+wake word is matched on whisper transcripts (not a dedicated low-power detector), and nothing was
+tested against a real microphone or real whisper.cpp model.
