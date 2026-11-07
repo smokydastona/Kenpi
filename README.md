@@ -112,10 +112,17 @@ It is an optional diagnostic client, not an assumed Kenwood display solution.
 See [Android companion](docs/android-companion.md) for build instructions and
 the API's current remote-access limitations.
 
-The API binds to loopback and exposes health, capabilities, and static dashboard
-content only. Camera and vehicle transports are not implemented or enabled.
-Host-only tests use explicitly labeled test doubles and do not count as hardware
-acceptance.
+The API binds to loopback and exposes health, capabilities, status, and static
+dashboard content only. Camera and vehicle transports are not implemented or
+enabled. Host-only tests use explicitly labeled test doubles and do not count
+as hardware acceptance.
+
+CI (`.github/workflows/ci.yml`) runs the Python checks above on 3.11/3.12 and
+builds a wheel, ShellChecks `deploy/` and `os-image/` scripts, verifies
+`deploy/kenpi-status.service` with `systemd-analyze verify`, and runs the
+Android project's JVM unit tests (`./gradlew testDebugUnitTest`). None of
+these CI jobs build or run anything against real camera, Kenwood, or ESP32
+hardware.
 
 ## Security and privacy
 
