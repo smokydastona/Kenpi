@@ -10,3 +10,6 @@ ignition/vehicle-state reports, heartbeat and Pi availability monitoring, wake
 requests, bounded shutdown coordination, sensor reporting, OLED diagnostics,
 watchdog recovery, and safe communication-loss behavior. No malformed or valid
 message may be able to disable normal dashcam recording.
+
+Camera (A810 Lite) firmware handling and the bench checklist are in
+`docs/camera-firmware.md`.
