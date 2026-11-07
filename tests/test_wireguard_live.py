@@ -188,7 +188,7 @@ class LiveWireGuardTests(unittest.TestCase):
             )
         )  # fmt: skip
         got = cls.phone("collect")
-        assert got["state"] == "approved", got
+        assert got["state"] == "collected", got
         cls.device_id = got["device_id"]
         conf = cls.tmp / "wg-phone.conf"
         wgc = cls.phone(

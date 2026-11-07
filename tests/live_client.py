@@ -135,14 +135,10 @@ async def cmd_collect(a):
             state, "POST", "/pair/status",
             {"enrollment_id": state["eid"], "signature": key.collect_proof(state["eid"])},
         )  # fmt: skip
-        if (
-            reply.get("state") == "approved"
-            or time.monotonic() > deadline
-            or status != 200
-        ):
+        if "access_token" in reply or time.monotonic() > deadline or status != 200:
             break
         await asyncio.sleep(0.5)
-    if reply.get("state") == "approved":
+    if "access_token" in reply:
         state.update(
             device_id=reply["device_id"], access=reply["access_token"],
             refresh=reply["refresh_token"], access_exp=time.time() + reply["expires_in"],
