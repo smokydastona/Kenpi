@@ -124,3 +124,13 @@ workflow has not yet been run on GitHub; the ESP32-S3 build and the pi-gen image
 build in particular have never completed in this project's environment.
 Retention is 90 days. The bundle contains build outputs only; nothing in it is
 hardware-verified.
+
+## Safe mode
+
+`kenpi --safe` (or creating `/var/lib/kenpi/safe-mode-once`, which is consumed
+on the next start so a crash loop cannot persist it) starts only the loopback
+status API. The vehicle UART link and the local media library are not started,
+and `/api/v1/diagnostics` reports `"safe_mode": true`. Use it to recover when a
+serial device or the media directory prevents normal startup. It never touches
+the dashcam, which records independently. The idea is inspired by OctoPrint's
+safe mode; no OctoPrint or OctoPi code was used (AGPL/GPL).

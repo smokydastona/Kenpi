@@ -81,6 +81,7 @@ class RouteTests(unittest.IsolatedAsyncioTestCase):
         payload = json.loads(body)
         self.assertEqual(payload["capability_states"]["camera_control"], "blocked")
         self.assertIn("status", payload)
+        self.assertFalse(payload["safe_mode"])
 
     async def test_rate_limit_returns_429(self) -> None:
         codes = set()

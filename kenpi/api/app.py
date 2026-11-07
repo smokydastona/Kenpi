@@ -76,6 +76,7 @@ class KenpiApiService:
         head_unit: str = "kenwood-dmx5710s",
         vehicle_provider: Callable[[], dict[str, object]] | None = None,
         media_library: LocalMediaLibrary | None = None,
+        safe_mode: bool = False,
     ) -> None:
         try:
             address = ipaddress.ip_address(host)
@@ -93,6 +94,7 @@ class KenpiApiService:
         self._head_unit = head_unit
         self._vehicle_provider = vehicle_provider
         self._media_library = media_library
+        self._safe_mode = safe_mode
         self._server: ThreadingHTTPServer | None = None
         self._server_task: asyncio.Task[None] | None = None
 
@@ -111,6 +113,7 @@ class KenpiApiService:
         selected_head_unit = self._head_unit
         vehicle_provider = self._vehicle_provider
         media_library = self._media_library
+        safe_mode = self._safe_mode
         limiter = _TokenBucket(rate_per_second=50.0, burst=100)
         started_at_monotonic = time.monotonic()
         started_at_iso = datetime.now(timezone.utc).isoformat()
@@ -230,6 +233,7 @@ class KenpiApiService:
                         {
                             "version": _KENPI_VERSION,
                             "head_unit": selected_head_unit,
+                            "safe_mode": safe_mode,
                             "capability_states": {
                                 c.name: c.state.value for c in capabilities
                             },

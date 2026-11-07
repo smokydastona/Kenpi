@@ -17,6 +17,12 @@
     "license": "MIT",
     "pushed": "2026-11-05"
   },
+  "Biohub/octopi": {
+    "archived": false,
+    "language": "Python",
+    "license": "NOASSERTION",
+    "pushed": "2026-10-07"
+  },
   "ClanSlum/Kino": {
     "archived": false,
     "language": "TypeScript",
@@ -52,6 +58,12 @@
     "language": "Java",
     "license": "Apache-2.0",
     "pushed": "2026-11-06"
+  },
+  "OctoPrint/OctoPrint": {
+    "archived": false,
+    "language": "Python",
+    "license": "AGPL-3.0",
+    "pushed": "2026-10-30"
   },
   "PiDashLab/EMU-PiDashboard": {
     "archived": false,
@@ -118,6 +130,12 @@
     "language": "C",
     "license": "GPL-2.0",
     "pushed": "2026-11-07"
+  },
+  "bq/OctoPrint-AppCompanion": {
+    "archived": false,
+    "language": "Python",
+    "license": null,
+    "pushed": "2015-10-06"
   },
   "brgl/libgpiod": {
     "archived": false,
@@ -203,6 +221,12 @@
     "license": "BSD-3-Clause",
     "pushed": "2026-07-27"
   },
+  "guysoft/OctoPi": {
+    "archived": false,
+    "language": "Shell",
+    "license": "GPL-3.0",
+    "pushed": "2026-08-03"
+  },
   "hardbyte/python-can": {
     "archived": false,
     "language": "Python",
@@ -279,7 +303,7 @@
     "archived": false,
     "language": "Python",
     "license": "MIT",
-    "pushed": "2026-11-05"
+    "pushed": "2026-11-07"
   },
   "openDsh/dash": {
     "archived": false,

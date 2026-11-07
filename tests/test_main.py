@@ -47,3 +47,29 @@ class MainTests(unittest.IsolatedAsyncioTestCase):
                 await _serve(Path("/unused/test-config.toml"))
         service.stop.assert_awaited_once()
         self.assertEqual(remove.call_count, 2)
+
+
+class SafeModeWiringTests(unittest.IsolatedAsyncioTestCase):
+    async def test_safe_mode_skips_vehicle_link_and_media(self) -> None:
+        config = KenpiConfig(
+            vehicle_uart_enabled=True,
+            vehicle_uart_device="/dev/ttyAMA0",
+            vehicle_uart_baud=115200,
+            media_directory="/tmp/kenpi-safe-mode-media",
+        )
+        service = AsyncMock()
+        service.start.side_effect = OSError("stop here")
+        loop = asyncio.get_running_loop()
+        with (
+            patch("kenpi.main.load_config", return_value=config),
+            patch("kenpi.main.KenpiApiService", return_value=service) as api,
+            patch("kenpi.main.VehicleLinkService") as link,
+            patch("kenpi.main.LocalMediaLibrary") as library,
+            patch.object(loop, "add_signal_handler"),
+            patch.object(loop, "remove_signal_handler"),
+        ):
+            with self.assertRaises(OSError):
+                await _serve(Path("/unused.toml"), safe_mode=True)
+        link.assert_not_called()
+        library.assert_not_called()
+        self.assertTrue(api.call_args.kwargs["safe_mode"])

@@ -390,3 +390,27 @@ slug = "XuZhen86/70MaiM300Toolbox"
 category = "dashcam"
 role = "Python CLI for M300"
 kenpi_use = "Different model; protocol cross-check only"
+
+[[project]]
+slug = "guysoft/OctoPi"
+category = "pi"
+role = "Pi image builder for OctoPrint (GPL-3.0 shell/config)"
+kenpi_use = "Reviewed in depth, code not copied. Ideas reimplemented independently: one-shot safe mode (kenpi --safe), unprivileged service layout, user-editable boot-partition config (not adopted: boot-partition overrides would bypass strict config validation), supervisor with friendly backend-down pages (not adopted: dashboard is served in-process on loopback)"
+
+[[project]]
+slug = "OctoPrint/OctoPrint"
+category = "integration"
+role = "3D-printer web interface (AGPL-3.0 Python)"
+kenpi_use = "Reviewed design, code not copied (AGPL). Ideas reimplemented independently: start-once safe mode that skips optional services. Studied and not adopted: plugin hook system, event bus and app-key approval workflow, because Kenpi has no consumers for them yet"
+
+[[project]]
+slug = "bq/OctoPrint-AppCompanion"
+category = "integration"
+role = "2015 OctoPrint plugin whitelisting one Android app key (source header says AGPLv3; GitHub shows no license)"
+kenpi_use = "Reference only. Shows pre-shared app-key identity for an Android companion; Kenpi's companion has no remote command path, so nothing to adopt"
+
+[[project]]
+slug = "Biohub/octopi"
+category = "integration"
+role = "Unrelated: protein coordinate search in cryo-ET tomograms"
+kenpi_use = "Reviewed and rejected: name collision with OctoPi/OctoPrint, no automotive, Pi or camera relevance"

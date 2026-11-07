@@ -63,6 +63,9 @@ Copyleft or unclear-license projects are reference-only: do not copy their code.
 
 | Project | License | Last push | Reuse policy | Role / Kenpi use |
 |---|---|---|---|---|
+| [Biohub/octopi](https://github.com/Biohub/octopi) | NOASSERTION | 2026-10-07 | reference-only (license unclear) | Unrelated: protein coordinate search in cryo-ET tomograms: Reviewed and rejected: name collision with OctoPi/OctoPrint, no automotive, Pi or camera relevance |
+| [OctoPrint/OctoPrint](https://github.com/OctoPrint/OctoPrint) | AGPL-3.0 | 2026-10-30 | reference-only (copyleft) | 3D-printer web interface (AGPL-3.0 Python): Reviewed design, code not copied (AGPL). Ideas reimplemented independently: start-once safe mode that skips optional services. Studied and not adopted: plugin hook system, event bus and app-key approval workflow, because Kenpi has no consumers for them yet |
+| [bq/OctoPrint-AppCompanion](https://github.com/bq/OctoPrint-AppCompanion) | none/unknown | 2015-10-06 | reference-only (license unclear) | 2015 OctoPrint plugin whitelisting one Android app key (source header says AGPLv3; GitHub shows no license): Reference only. Shows pre-shared app-key identity for an Android companion; Kenpi's companion has no remote command path, so nothing to adopt |
 | [eclipse-mosquitto/mosquitto](https://github.com/eclipse-mosquitto/mosquitto) | NOASSERTION | 2026-11-06 | reference-only (license unclear) | MQTT broker: Optional internal bus; not adopted (single-process design) |
 | [eclipse-paho/paho.mqtt.python](https://github.com/eclipse-paho/paho.mqtt.python) | NOASSERTION | 2026-11-04 | reference-only (license unclear) | MQTT client: Optional; not adopted |
 | [home-assistant/core](https://github.com/home-assistant/core) | Apache-2.0 | 2026-11-07 | may-depend (permissive; confirm per component) | Integration/state architecture: Design reference for coordinator/entity pattern |
@@ -85,6 +88,7 @@ Copyleft or unclear-license projects are reference-only: do not copy their code.
 | [bluez/bluez](https://github.com/bluez/bluez) | GPL-2.0 | 2026-11-07 | reference-only (copyleft) | Linux Bluetooth stack: Needed if BLE pairing with the camera is evidenced |
 | [brgl/libgpiod](https://github.com/brgl/libgpiod) | NOASSERTION | 2026-11-05 | reference-only (license unclear) | Linux GPIO character device: Preferred GPIO interface when GPIO is needed |
 | [gpiozero/gpiozero](https://github.com/gpiozero/gpiozero) | BSD-3-Clause | 2026-07-27 | may-depend (permissive; confirm per component) | Python GPIO: Optional; libgpiod preferred |
+| [guysoft/OctoPi](https://github.com/guysoft/OctoPi) | GPL-3.0 | 2026-08-03 | reference-only (copyleft) | Pi image builder for OctoPrint (GPL-3.0 shell/config): Reviewed in depth, code not copied. Ideas reimplemented independently: one-shot safe mode (kenpi --safe), unprivileged service layout, user-editable boot-partition config (not adopted: boot-partition overrides would bypass strict config validation), supervisor with friendly backend-down pages (not adopted: dashboard is served in-process on loopback) |
 | [pyserial/pyserial](https://github.com/pyserial/pyserial) | NOASSERTION | 2026-05-19 | reference-only (license unclear) | Serial port library: Not adopted: kenpi.vehicle.link uses stdlib termios to stay dependency-free |
 | [raspberrypi/documentation](https://github.com/raspberrypi/documentation) | CC-BY-SA-4.0 | 2026-11-05 | may-depend (permissive; confirm per component) | Official Pi docs: Verify UART/GPIO electrical facts before assigning pins |
 | [raspberrypi/linux](https://github.com/raspberrypi/linux) | NOASSERTION | 2026-11-06 | reference-only (license unclear) | Raspberry Pi kernel: Reference for UART/GPIO overlays |
@@ -107,7 +111,7 @@ Copyleft or unclear-license projects are reference-only: do not copy their code.
 | [alufers/mitmproxy2swagger](https://github.com/alufers/mitmproxy2swagger) | none/unknown | 2026-11-02 | reference-only (license unclear) | Capture to OpenAPI: Turn captures into an endpoint contract |
 | [frida/frida](https://github.com/frida/frida) | NOASSERTION | 2026-11-07 | reference-only (license unclear) | Dynamic instrumentation: Inspect vendor app request signing |
 | [mitmproxy/mitmproxy](https://github.com/mitmproxy/mitmproxy) | MIT | 2026-11-04 | may-depend (permissive; confirm per component) | HTTP(S) interception: Record vendor-app HTTP calls for the contract |
-| [onekey-sec/unblob](https://github.com/onekey-sec/unblob) | MIT | 2026-11-05 | may-depend (permissive; confirm per component) | Firmware extraction: Firmware inspection |
+| [onekey-sec/unblob](https://github.com/onekey-sec/unblob) | MIT | 2026-11-07 | may-depend (permissive; confirm per component) | Firmware extraction: Firmware inspection |
 | [openocd-org/openocd](https://github.com/openocd-org/openocd) | NOASSERTION | 2026-11-04 | reference-only (license unclear) | JTAG/SWD debugging: ESP32-S3 debugging |
 | [secdev/scapy](https://github.com/secdev/scapy) | GPL-2.0 | 2026-11-04 | reference-only (copyleft) | Packet crafting: Protocol experiments |
 | [wireshark/wireshark](https://github.com/wireshark/wireshark) | GPL-2.0 | 2026-11-07 | reference-only (copyleft) | Packet analysis: Capture A810 Lite app traffic for protocol evidence |
