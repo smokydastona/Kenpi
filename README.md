@@ -101,6 +101,10 @@ Run the local status dashboard with:
 kenpi --config config/kenpi.example.toml
 ```
 
+The read-only native Android companion project is in [`android/`](android/).
+See [Android companion](docs/android-companion.md) for build instructions and
+the API's current remote-access limitations.
+
 The API binds to loopback and exposes health, capabilities, and static dashboard
 content only. Camera and vehicle transports are not implemented or enabled.
 Host-only tests use explicitly labeled test doubles and do not count as hardware

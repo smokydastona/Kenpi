@@ -6,6 +6,9 @@ __pycache__/
 .coverage
 dist/
 build/
+.gradle/
+local.properties
+*.iml
 captures/*
 !captures/README.md
 config/kenpi.yaml
