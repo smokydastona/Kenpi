@@ -41,3 +41,22 @@ No emulator or physical Android device has run the app: Keystore, QR scanning, c
 permission, EncryptedSharedPreferences and the Compose UI are compiled in CI but untested at
 runtime. Remote (WireGuard) use from a phone is untested; the app displays tunnel parameters
 only and does not configure the VPN.
+
+## Verified build status
+
+Verified on a Linux host (JDK 17, Gradle 8.9, no Android SDK):
+
+```
+cd android
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 KENPI_CORE_ONLY=1 \
+  KENPI_INTEROP_PYTHON=$(which python) KENPI_INTEROP_ROOT=$(cd .. && pwd) \
+  ./gradlew --no-daemon :core:test
+```
+
+Result: `:core` (the gateway client, `Api.kt`, pairing, `LocalHelper`) compiled and all 17 tests
+passed with 0 skipped, including 7 interop tests that run the Kotlin client against the real
+Python gateway. JDK 27 fails with Gradle 8.9; use JDK 17.
+
+Not verified: the `:app` module (Compose UI, `AppModel`, Keystore, `MainActivity`). It needs the
+Android Gradle Plugin from Google's Maven repository (`dl.google.com`), which was unreachable
+from this host, so the app has not been compiled, instrumented or packaged as an APK.
