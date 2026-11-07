@@ -88,3 +88,5 @@ camera, preview, media, or hardware-control features. They cannot acquire a real
 driver solely from software tests. Independent platform observation, safety,
 status, lifecycle, and deployment work is implemented without enabling those
 blocked paths.
+
+See also [research corpus](research-corpus.md).
