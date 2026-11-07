@@ -12,6 +12,7 @@ from kenpi.api.app import KenpiApiService, capability_payload, disabled_state
 from kenpi.core.capabilities import INITIAL_CAPABILITIES
 from kenpi.core.config import load_config
 from kenpi.core.events import EventBus, EventType
+from kenpi.notify.notifier import Notifier
 from kenpi.core.safemode import DEFAULT_MARKER, safe_mode_requested
 from kenpi.media.library import LocalMediaLibrary
 from kenpi.services.coordinator import ServiceCoordinator
@@ -136,6 +137,7 @@ async def _serve(config_path: Path, safe_mode: bool = False) -> None:
         )
     # The link starts first so the API never reports a link that is not running.
     coordinator = ServiceCoordinator(tuple(services), events=events)
+    notifier = Notifier(events, config.notify_ntfy_url, config.notify_webhook_url)
     coordinator_ref.append(coordinator)
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -145,10 +147,12 @@ async def _serve(config_path: Path, safe_mode: bool = False) -> None:
             loop.add_signal_handler(signum, stopped.set)
             installed_signals.append(signum)
         await coordinator.start()
+        notifier.start()
         logger.info("Local status service started")
         await stopped.wait()
     finally:
         try:
+            notifier.stop()
             await coordinator.stop()
             events.close()
             logger.info("Local status service stopped")

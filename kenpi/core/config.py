@@ -30,6 +30,8 @@ class KenpiConfig:
     gateway_port: int = 8443
     wireguard_network: str = ""
     wireguard_port: int = 51820
+    notify_ntfy_url: str = ""
+    notify_webhook_url: str = ""
 
     def _validate_vehicle_link(self) -> None:
         _validate_vehicle_link_fields(self)
@@ -80,10 +82,24 @@ class KenpiConfig:
         ):
             raise ConfigurationError("media_directory must be an absolute path")
         _validate_gateway(self)
+        _validate_notify(self)
         if not address.is_loopback:
             raise ConfigurationError(
                 "unauthenticated API must bind to loopback in every environment"
             )
+
+
+def _validate_notify(config: KenpiConfig) -> None:
+    from kenpi.notify.notifier import validate_url
+
+    for value in (config.notify_ntfy_url, config.notify_webhook_url):
+        if not isinstance(value, str):
+            raise ConfigurationError("notification URLs must be strings")
+        if value:
+            try:
+                validate_url(value)
+            except ValueError as exc:
+                raise ConfigurationError(str(exc)) from exc
 
 
 def _validate_gateway(config: KenpiConfig) -> None:
