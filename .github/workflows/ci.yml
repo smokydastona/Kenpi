@@ -59,6 +59,13 @@ jobs:
           sudo chmod +x /opt/kenpi/current/venv/bin/python
           systemd-analyze verify ./deploy/kenpi-status.service
 
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run native firmware unit tests
+        run: firmware/tools/run_native_tests.sh
+
   android:
     runs-on: ubuntu-latest
     steps:

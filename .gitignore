@@ -14,3 +14,4 @@ captures/*
 config/kenpi.yaml
 *.log
 os-image/.pi-gen/
+firmware/.native-build/

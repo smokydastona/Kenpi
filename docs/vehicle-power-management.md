@@ -17,10 +17,18 @@ reads, rejects bad checksums/oversized frames, and skips unsupported versions.
 `SequenceTracker` rejects duplicate/stale sequence values and accepts natural
 16-bit wraparound.
 
-This host-side framing code is not yet paired with ESP32 firmware, acknowledgments,
-ignition/sensor schemas, watchdog behavior, or electrical validation. The parser
-does not authorize hardware actions. Loss-of-link behavior must leave camera
-recording unaffected.
+`firmware/` now contains a hardware-independent C++ port of this protocol plus a
+pure vehicle power coordination state machine (`VEHICLE_OFF`,
+`IGNITION_DETECTED`, `STARTING`, `RUNNING`, `IGNITION_LOST`,
+`SHUTDOWN_PENDING`, `SHUTTING_DOWN`, `SLEEPING`, `WAKING`, `FAULT`), both
+covered by host-executable unit tests (`firmware/tools/run_native_tests.sh`).
+Neither component reads GPIO or controls dashcam power. What remains
+unimplemented: acknowledgments, ignition/sensor message schemas, watchdog
+behavior, electrical validation, and any real pin assignment (the firmware's
+`BoardConfig` ships unconfigured and refuses to validate until bench-verified
+pins are supplied — see `firmware/README.md`). The parser does not authorize
+hardware actions. Loss-of-link behavior must leave camera recording
+unaffected.
 
 ## Physical validation required
 
