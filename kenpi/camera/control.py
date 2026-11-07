@@ -42,11 +42,17 @@ class CameraControlService:
 
         try:
             encoded = self._codec.encode_request(command, payload)
+        except Exception as exc:
+            return OperationResult(
+                request_created=False,
+                error=f"camera request could not be encoded: {type(exc).__name__}",
+            )
+        try:
             response = await asyncio.wait_for(
                 self._adapter.request(encoded, self._timeout),
                 timeout=self._timeout,
             )
-        except (TimeoutError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, asyncio.TimeoutError):
             return OperationResult(request_created=True, error="camera request timed out")
         except Exception as exc:
             return OperationResult(request_created=True, error=f"camera transport failed: {type(exc).__name__}")

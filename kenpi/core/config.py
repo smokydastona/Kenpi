@@ -21,16 +21,26 @@ class KenpiConfig:
     vehicle_uart_enabled: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.environment, str):
+            raise ConfigurationError("environment must be a string")
         if self.environment not in {"production", "development", "test"}:
             raise ConfigurationError("environment must be production, development, or test")
+        if not isinstance(self.api_host, str):
+            raise ConfigurationError("api_host must be an IP address")
         try:
             ipaddress.ip_address(self.api_host)
         except ValueError as exc:
             raise ConfigurationError("api_host must be an IP address") from exc
-        if not 1 <= self.api_port <= 65535:
+        if type(self.api_port) is not int or not 1 <= self.api_port <= 65535:
             raise ConfigurationError("api_port must be between 1 and 65535")
-        if not 0.1 <= self.camera_request_timeout_seconds <= 60:
+        if (
+            isinstance(self.camera_request_timeout_seconds, bool)
+            or not isinstance(self.camera_request_timeout_seconds, (int, float))
+            or not 0.1 <= self.camera_request_timeout_seconds <= 60
+        ):
             raise ConfigurationError("camera request timeout must be between 0.1 and 60 seconds")
+        if type(self.camera_enabled) is not bool or type(self.vehicle_uart_enabled) is not bool:
+            raise ConfigurationError("feature flags must be booleans")
         if self.environment == "production" and self.api_host not in {"127.0.0.1", "::1"}:
             raise ConfigurationError("production API must bind to loopback until authentication is configured")
 
