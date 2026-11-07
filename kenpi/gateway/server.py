@@ -103,6 +103,8 @@ class GatewayServer:
         auth_timeout_seconds: float = 5.0,
         revalidate_seconds: float = 2.0,
         queue_size: int = 64,
+        wireguard_info: Callable[[Device], dict | None] = lambda device: None,
+        rebind_seconds: float = 5.0,
     ) -> None:
         for host in hosts:
             validate_bind_host(host)
@@ -126,27 +128,52 @@ class GatewayServer:
         self._auth_limiter = RateLimiter(10, 60.0)
         self._pair_limiter = RateLimiter(30, 60.0)
         self.bound_ports: list[int] = []
+        self._wireguard_info, self._rebind_seconds = wireguard_info, rebind_seconds
+        self._unbound: list[str] = []
+        self._rebinder: asyncio.Task[None] | None = None
+
+    async def _bind(self, host: str) -> bool:
+        try:
+            server = await asyncio.start_server(
+                self._handle, host, self._port, ssl=self._ssl, limit=16384
+            )
+        except OSError as exc:
+            if any(ipaddress.ip_address(host) in n for n in self._remote_networks):
+                logger.warning("Remote gateway address %s unavailable: %s", host, exc)
+                return False
+            raise
+        self._servers.append(server)
+        self.bound_ports.append(server.sockets[0].getsockname()[1])
+        return True
 
     async def start(self) -> None:
         for host in self._hosts:
             try:
-                server = await asyncio.start_server(
-                    self._handle, host, self._port, ssl=self._ssl, limit=16384
-                )
-            except OSError as exc:
-                if any(ipaddress.ip_address(host) in n for n in self._remote_networks):
-                    logger.warning(
-                        "Remote gateway address %s unavailable: %s", host, exc
-                    )
-                    continue
+                bound = await self._bind(host)
+            except OSError:
                 await self.stop()
                 raise
-            self._servers.append(server)
-            self.bound_ports.append(server.sockets[0].getsockname()[1])
+            if not bound:
+                self._unbound.append(host)
         if not self._servers:
             raise OSError("gateway could not bind any address")
+        if self._unbound:
+            self._rebinder = asyncio.create_task(self._rebind_loop())
+
+    async def _rebind_loop(self) -> None:
+        # The WireGuard address only exists while the tunnel is up; bind it when it appears.
+        while self._unbound:
+            await asyncio.sleep(self._rebind_seconds)
+            for host in list(self._unbound):
+                if await self._bind(host):
+                    self._unbound.remove(host)
+                    logger.info("Remote gateway address %s now bound", host)
 
     async def stop(self) -> None:
+        if self._rebinder:
+            self._rebinder.cancel()
+            await asyncio.gather(self._rebinder, return_exceptions=True)
+            self._rebinder = None
         for server in self._servers:
             server.close()
         for task in list(self._tasks):
@@ -295,14 +322,23 @@ class GatewayServer:
                 "refresh_token": tokens.refresh_token,
             }
         if method == "GET" and path == "/api/v1/snapshot":
-            scheme, _, token = headers.get("authorization", "").partition(" ")
-            if scheme.lower() != "bearer" or not token:
-                raise AuthError("invalid_token")
-            device = self._registry.authenticate(
-                token, zone == "remote", self._remote_enabled()
-            )
+            device = self._authenticated(headers, zone)
             return 200, self._snapshot_message(device)
-        return (405 if path in {"/pair/enroll", "/pair/status", "/auth/refresh", "/api/v1/snapshot"} else 404), {"error": "not_found"}  # fmt: skip
+        if method == "GET" and path == "/api/v1/wireguard":
+            device = self._authenticated(headers, zone)
+            info = self._wireguard_info(device)
+            if info is None:
+                return 404, {"error": "not_found"}
+            return 200, {"wireguard": info}
+        return (405 if path in {"/pair/enroll", "/pair/status", "/auth/refresh", "/api/v1/snapshot", "/api/v1/wireguard"} else 404), {"error": "not_found"}  # fmt: skip
+
+    def _authenticated(self, headers: dict, zone: str) -> Device:
+        scheme, _, token = headers.get("authorization", "").partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            raise AuthError("invalid_token")
+        return self._registry.authenticate(
+            token, zone == "remote", self._remote_enabled()
+        )
 
     def _snapshot_message(self, device: Device) -> dict:
         latest = self._events.events_after(0, 1)

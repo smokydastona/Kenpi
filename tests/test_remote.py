@@ -49,11 +49,24 @@ class WireGuardTests(unittest.TestCase):
             self.dir / "server.key",
             self.dir / "wg.conf",
             runner=self._run,
+            capture=self._capture,
         )
+        self.dump = None  # None: interface absent
 
     def _run(self, cmd):
         self.calls.append(list(cmd))
         return self.rc.get(cmd[0] if cmd[0] != "wg" else " ".join(cmd[:2]), 0)
+
+    def _capture(self, cmd):
+        self.calls.append(list(cmd))
+        return (1, "") if self.dump is None else (0, self.dump)
+
+    @staticmethod
+    def dump_text(peers=()):
+        lines = ["PRIV\tSERVERPUB\t51820\toff"]
+        for key, ips, hs in peers:
+            lines.append(f"{key}\t(none)\t(none)\t{ips}\t{hs}\t10\t20\toff")
+        return "\n".join(lines) + "\n"
 
     def enrol(self, name, remote=True, wg=True):
         key = DeviceKey()
@@ -68,7 +81,7 @@ class WireGuardTests(unittest.TestCase):
     def test_disabled_by_default(self):
         self.assertFalse(RemoteState(self.dir / "gw").enabled())
         self.access.apply()
-        self.assertEqual(self.calls, [["wg-quick", "down", "wg-kenpi"]])
+        self.assertEqual(self.calls, [["wg", "show", "wg", "dump"]])
 
     def test_config_has_no_private_key_and_stable_addresses(self):
         a, b = self.enrol("a"), self.enrol("b")
@@ -89,15 +102,61 @@ class WireGuardTests(unittest.TestCase):
         self.enrol("nokey", wg=False)
         self.assertEqual(self.access.write_config().count("[Peer]"), 0)
 
-    def test_enable_brings_tunnel_up_and_revocation_syncs(self):
-        self.rc["wg show"] = 1  # interface absent
+    def test_enable_brings_tunnel_up_and_revocation_removes_peer_incrementally(self):
+        device = self.enrol("a")
         self.access.enable()
         self.assertTrue(RemoteState(self.dir / "gw").enabled())
-        self.assertIn(["wg-quick", "up", "wg-kenpi"], self.calls)
-        self.rc["wg show"] = 0
+        self.assertIn(["wg-quick", "up", str(self.dir / "wg.conf")], self.calls)
+        key, address = self.registry.wireguard_peers("10.77.0.0/24")[device]
+        self.dump = self.dump_text([(key, f"{address}/32", 0)])
         self.calls.clear()
-        self.access.apply()
-        self.assertEqual(self.calls[-1][:3], ["wg", "syncconf", "wg-kenpi"])
+        self.assertFalse(
+            self.access.reconcile()
+        )  # nothing changed, no commands applied
+        self.registry.revoke(device)
+        self.calls.clear()
+        self.assertTrue(self.access.reconcile())
+        self.assertIn(["wg", "set", "wg", "peer", key, "remove"], self.calls)
+        self.assertFalse(any("syncconf" in c for c in self.calls))
+
+    def test_new_device_is_added_to_running_tunnel(self):
+        self.access.enable()
+        self.dump = self.dump_text()
+        device = self.enrol("late")
+        self.calls.clear()
+        self.assertTrue(self.access.reconcile())
+        key, address = self.registry.wireguard_peers("10.77.0.0/24")[device]
+        self.assertIn(["wg", "set", "wg", "peer", key, "allowed-ips", f"{address}/32"], self.calls)  # fmt: skip
+
+    def test_diagnostics_reports_drift_and_exposure(self):
+        device = self.enrol("a")
+        report = self.access.diagnostics()
+        self.assertFalse(report["up"])
+        self.assertEqual(report["problems"], [])  # disabled and down is consistent
+        self.access.enable()
+        report = self.access.diagnostics()
+        self.assertIn("remote access is enabled but the tunnel interface is down", report["problems"])  # fmt: skip
+        key, _ = self.registry.wireguard_peers("10.77.0.0/24")[device]
+        self.dump = self.dump_text([(key, "10.77.0.2/32", 100), ("STRANGER" + "A" * 35 + "=", "10.77.0.9/32", 0)])  # fmt: skip
+        report = self.access.diagnostics(now=160)
+        self.assertEqual(report["peers"][0]["handshake_age_seconds"], 60)
+        self.assertEqual(report["peers"][0]["device_id"], device)
+        self.assertIsNone(report["peers"][1]["device_id"])
+        self.assertTrue(any("not an active permitted device" in p for p in report["problems"]))  # fmt: skip
+        self.assertNotIn("PRIV", str(report))
+
+    def test_client_parameters_contain_no_secrets(self):
+        from kenpi.remote.wireguard import client_parameters, render_client_config
+
+        device = self.enrol("a")
+        params = client_parameters(self.registry, "10.77.0.0/24", 51820, self.dir / "server.key", device)  # fmt: skip
+        self.assertIsNone(params)  # server key not created until remote is set up
+        self.access.write_config()
+        params = client_parameters(self.registry, "10.77.0.0/24", 51820, self.dir / "server.key", device)  # fmt: skip
+        self.assertEqual(params["allowed_ips"], ["10.77.0.1/32"])
+        text = render_client_config(params, "kenpi.example")
+        self.assertIn("AllowedIPs = 10.77.0.1/32", text)
+        self.assertIn("PrivateKey = <PRIVATE_KEY_STAYS_ON_DEVICE>", text)
 
     def test_up_failure_raises(self):
         self.rc["wg show"] = 1

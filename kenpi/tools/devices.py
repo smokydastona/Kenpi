@@ -10,12 +10,20 @@ import argparse
 import base64
 import json
 import shutil
+import signal
 import subprocess
+import threading
 import sys
 from pathlib import Path
 
 from kenpi.core.config import load_config
-from kenpi.remote.wireguard import RemoteAccess, RemoteState, ensure_server_key
+from kenpi.remote.wireguard import (
+    RemoteAccess,
+    RemoteState,
+    client_parameters,
+    ensure_server_key,
+    render_client_config,
+)
 from kenpi.security.devices import DEFAULT_SCOPES, AuthError, DeviceRegistry
 from kenpi.security.tls import ensure_certificate
 
@@ -31,7 +39,7 @@ def pairing_payload(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kenpi-devices")
-    parser.add_argument("--config", type=Path, default=Path("/etc/kenpi/kenpi.toml"))
+    parser.add_argument("--config", type=Path, default=Path("/etc/kenpi/status.toml"))
     sub = parser.add_subparsers(dest="cmd", required=True)
     pair = sub.add_parser("pair", help="start pairing and print the QR payload")
     pair.add_argument("--scopes", default=",".join(sorted(DEFAULT_SCOPES)))
@@ -47,8 +55,15 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_parser(name).add_argument("device_id")
     remote = sub.add_parser("remote")
     remote.add_argument(
-        "action", choices=["status", "enable", "disable", "render", "apply", "init-key"]
-    )
+        "action",
+        choices=[
+            "status", "enable", "disable", "render", "apply", "init-key",
+            "diagnose", "watch", "client-config",
+        ],
+    )  # fmt: skip
+    remote.add_argument("--device", help="device id (client-config)")
+    remote.add_argument("--endpoint", help="public/LAN host of this Pi (client-config)")
+    remote.add_argument("--interval", type=float, default=5.0, help="seconds (watch)")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
@@ -108,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
             registry.revoke(args.device_id, "re-enrolment")
             print("revoked; run 'pair' with the same scopes:", ",".join(old["scopes"]))  # type: ignore[arg-type]
         elif args.cmd == "remote":
-            return _remote(args.action, config, registry, state_dir)
+            return _remote(args, config, registry, state_dir)
     except AuthError as exc:
         print(f"error: {exc.code}", file=sys.stderr)
         return 1
@@ -121,6 +136,7 @@ def _access(config, registry, state_dir) -> RemoteAccess:
     return RemoteAccess(
         registry, RemoteState(state_dir), config.wireguard_network, config.wireguard_port,
         state_dir / "wireguard" / "server.key",
+        state_dir / "wireguard" / "wg-kenpi.conf",
     )  # fmt: skip
 
 
@@ -130,7 +146,8 @@ def _sync_remote(config, registry, state_dir) -> None:
         _access(config, registry, state_dir).apply()
 
 
-def _remote(action, config, registry, state_dir) -> int:
+def _remote(args, config, registry, state_dir) -> int:
+    action = args.action
     state = RemoteState(state_dir)
     if action == "status":
         print(json.dumps({"enabled": state.enabled()}))
@@ -146,6 +163,27 @@ def _remote(action, config, registry, state_dir) -> int:
         access.disable()
     elif action == "apply":
         access.apply()
+    elif action == "diagnose":
+        report = access.diagnostics()
+        print(json.dumps(report, indent=1))
+        return 1 if report["problems"] else 0
+    elif action == "watch":
+        stop = threading.Event()
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(signum, lambda *_: stop.set())
+        access.watch(args.interval, stop.is_set)
+    elif action == "client-config":
+        if not args.device or not args.endpoint:
+            print("error: --device and --endpoint are required", file=sys.stderr)
+            return 2
+        params = client_parameters(
+            registry, config.wireguard_network, config.wireguard_port,
+            state_dir / "wireguard" / "server.key", args.device,
+        )  # fmt: skip
+        if params is None:
+            print("error: device is not remote-permitted or has no WireGuard key", file=sys.stderr)  # fmt: skip
+            return 1
+        sys.stdout.write(render_client_config(params, args.endpoint))
     return 0
 
 

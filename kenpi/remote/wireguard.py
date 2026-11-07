@@ -3,7 +3,8 @@
 Remote access is off by default and is a network boundary only; the gateway still
 requires a valid per-device credential. The server private key never appears in the
 rendered config (it is loaded from a 0600 file by ``PostUp``) and is never backed up.
-Not validated against a live tunnel in this repository's CI.
+Lifecycle (``RemoteAccess``) drives the standard ``wg``/``wg-quick`` tools; the live-tunnel
+tests in ``tests/test_wireguard_live.py`` exercise it with real WireGuard in network namespaces.
 """
 
 from __future__ import annotations
@@ -110,10 +111,76 @@ def render_config(
 
 
 Runner = Callable[[Sequence[str]], int]
+Capture = Callable[[Sequence[str]], tuple[int, str]]
 
 
 def _run(command: Sequence[str]) -> int:
     return subprocess.run(command, check=False, timeout=30).returncode
+
+
+def _capture(command: Sequence[str]) -> tuple[int, str]:
+    done = subprocess.run(
+        command, check=False, timeout=30, capture_output=True, text=True
+    )
+    return done.returncode, done.stdout
+
+
+def parse_dump(text: str) -> dict:
+    """Parse ``wg show <if> dump``; the private key field is deliberately discarded."""
+    lines = [line.split("\t") for line in text.strip().splitlines() if line.strip()]
+    if not lines or len(lines[0]) < 3:
+        raise ValueError("unrecognised wg dump")
+    iface = {"public_key": lines[0][1], "listen_port": int(lines[0][2])}
+    peers = []
+    for f in lines[1:]:
+        if len(f) < 8:
+            raise ValueError("unrecognised wg peer line")
+        peers.append(
+            {
+                "public_key": f[0],
+                "endpoint": None if f[2] == "(none)" else f[2],
+                "allowed_ips": [] if f[3] == "(none)" else f[3].split(","),
+                "latest_handshake": int(f[4]) or None,
+                "rx_bytes": int(f[5]),
+                "tx_bytes": int(f[6]),
+            }
+        )
+    return {**iface, "peers": peers}
+
+
+def client_parameters(
+    registry: DeviceRegistry, network: str, listen_port: int,
+    key_path: str | Path, device_id: str,
+) -> dict | None:  # fmt: skip
+    """What a remote device needs to configure its own tunnel (no secrets)."""
+    peer = registry.wireguard_peers(network).get(device_id)
+    if peer is None or not Path(key_path).exists():
+        return None
+    net = ipaddress.ip_network(network)
+    return {
+        "server_public_key": ensure_server_key(key_path),
+        "listen_port": listen_port,
+        "address": f"{peer[1]}/32",
+        "gateway_address": str(next(net.hosts())),
+        "allowed_ips": [f"{next(net.hosts())}/32"],
+    }
+
+
+def render_client_config(
+    params: dict, endpoint_host: str, private_key: str = "<PRIVATE_KEY_STAYS_ON_DEVICE>"
+) -> str:
+    if not re.match(r"^[A-Za-z0-9.-]+$", endpoint_host):
+        raise ValueError("invalid endpoint host")
+    return (
+        "[Interface]\n"
+        f"PrivateKey = {private_key}\n"
+        f"Address = {params['address']}\n\n"
+        "[Peer]\n"
+        f"PublicKey = {params['server_public_key']}\n"
+        f"Endpoint = {endpoint_host}:{params['listen_port']}\n"
+        f"AllowedIPs = {', '.join(params['allowed_ips'])}\n"
+        "PersistentKeepalive = 25\n"
+    )
 
 
 class RemoteAccess:
@@ -126,14 +193,13 @@ class RemoteAccess:
         key_path: str | Path,
         conf_path: str | Path = f"/etc/wireguard/{INTERFACE}.conf",
         runner: Runner = _run,
+        capture: Capture = _capture,
     ) -> None:
         self._registry, self._state, self._network = registry, state, network
-        self._port, self._key, self._conf, self._run = (
-            listen_port,
-            key_path,
-            Path(conf_path),
-            runner,
-        )
+        self._port, self._key, self._conf = listen_port, key_path, Path(conf_path)
+        self._run, self._capture = runner, capture
+        self._iface = self._conf.stem
+        self._applied: tuple | None = None
 
     def write_config(self) -> str:
         ensure_server_key(self._key)
@@ -160,26 +226,124 @@ class RemoteAccess:
         self._registry.audit("remote_disabled")
         self.apply()
 
+    def _live_peers(self) -> dict[str, list[str]] | None:
+        code, out = self._capture(["wg", "show", self._iface, "dump"])
+        if code != 0:
+            return None
+        return {p["public_key"]: p["allowed_ips"] for p in parse_dump(out)["peers"]}
+
     def apply(self) -> None:
-        """Bring the tunnel in line with the flag and the current (non-revoked) peers."""
+        """Bring the tunnel in line with the flag and the current (non-revoked) peers.
+
+        A running tunnel is changed with incremental ``wg set`` calls so the interface
+        private key and established sessions of unaffected peers are never disturbed.
+        """
         if not self._state.enabled():
-            self._run(["wg-quick", "down", INTERFACE])
+            if self._live_peers() is not None:
+                self._run(["wg-quick", "down", str(self._conf)])
+            self._applied = (False,)
             return
         self.write_config()
-        if self._run(["wg", "show", INTERFACE]) != 0:
-            if self._run(["wg-quick", "up", INTERFACE]) != 0:
+        wanted = self._registry.wireguard_peers(self._network)
+        live = self._live_peers()
+        if live is None:
+            if self._run(["wg-quick", "up", str(self._conf)]) != 0:
                 raise RuntimeError("wg-quick up failed")
-            return
-        stripped = self._conf.with_suffix(".stripped")
-        fd = os.open(stripped, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        os.close(fd)
-        try:
-            if (
-                self._run(["sh", "-c", f"wg-quick strip {self._conf} > {stripped}"])
-                != 0
-            ):
-                raise RuntimeError("wg-quick strip failed")
-            if self._run(["wg", "syncconf", INTERFACE, str(stripped)]) != 0:
-                raise RuntimeError("wg syncconf failed")
-        finally:
-            stripped.unlink(missing_ok=True)
+        else:
+            desired = {key: [f"{addr}/32"] for key, addr in wanted.values()}
+            for key in set(live) - set(desired):
+                if self._run(["wg", "set", self._iface, "peer", key, "remove"]) != 0:
+                    raise RuntimeError("wg set peer remove failed")
+            for key, ips in desired.items():
+                if live.get(key) != ips and (
+                    self._run(
+                        [
+                            "wg",
+                            "set",
+                            self._iface,
+                            "peer",
+                            key,
+                            "allowed-ips",
+                            ",".join(ips),
+                        ]
+                    )
+                    != 0
+                ):
+                    raise RuntimeError("wg set peer add failed")
+        self._applied = self._desired()
+
+    def _desired(self) -> tuple:
+        if not self._state.enabled():
+            return (False,)
+        return (
+            True,
+            tuple(sorted(self._registry.wireguard_peers(self._network).values())),
+        )
+
+    def reconcile(self) -> bool:
+        """Apply only if the desired state changed or the tunnel drifted; True if it applied."""
+        desired = self._desired()
+        drifted = desired[0] and self._live_peers() is None
+        if desired == self._applied and not drifted:
+            return False
+        self.apply()
+        return True
+
+    def diagnostics(self, now: float | None = None) -> dict:
+        """Factual tunnel state and detected problems; never reports a guess as fact."""
+        now = time.time() if now is None else now
+        enabled = self._state.enabled()
+        report: dict = {"enabled": enabled, "interface": self._iface, "up": False,
+                        "problems": [], "peers": []}  # fmt: skip
+        code, out = self._capture(["wg", "show", self._iface, "dump"])
+        wanted = self._registry.wireguard_peers(self._network) if enabled else {}
+        by_key = {key: dev for dev, (key, _) in wanted.items()}
+        if code == 0:
+            dump = parse_dump(out)
+            report.update(
+                up=True, public_key=dump["public_key"], listen_port=dump["listen_port"]
+            )
+            for peer in dump["peers"]:
+                handshake = peer["latest_handshake"]
+                report["peers"].append(
+                    {
+                        **peer,
+                        "device_id": by_key.get(peer["public_key"]),
+                        "handshake_age_seconds": None
+                        if handshake is None
+                        else max(0, int(now - handshake)),
+                    }  # fmt: skip
+                )
+                if peer["public_key"] not in by_key:
+                    report["problems"].append("tunnel has a peer that is not an active permitted device")  # fmt: skip
+            live = {p["public_key"] for p in dump["peers"]}
+            for key, dev in by_key.items():
+                if key not in live:
+                    report["problems"].append(f"permitted device {dev} is missing from the tunnel")  # fmt: skip
+        if enabled and code != 0:
+            report["problems"].append(
+                "remote access is enabled but the tunnel interface is down"
+            )
+        if not enabled and code == 0:
+            report["problems"].append(
+                "remote access is disabled but the tunnel interface is up"
+            )
+        if self._conf.exists() and self._conf.stat().st_mode & 0o077:
+            report["problems"].append("WireGuard config is readable by other users")
+        if Path(self._key).exists() and Path(self._key).stat().st_mode & 0o077:
+            report["problems"].append("WireGuard server key is readable by other users")
+        return report
+
+    def watch(self, interval: float, should_stop: Callable[[], bool]) -> None:
+        """Reconcile forever; errors are logged and retried, never fatal."""
+        import logging
+
+        log = logging.getLogger(__name__)
+        while not should_stop():
+            try:
+                if self.reconcile():
+                    log.info("WireGuard reconciled")
+            except Exception as exc:  # noqa: BLE001 - keep the watcher alive
+                log.error("WireGuard reconcile failed: %s", exc)
+                self._applied = None
+            time.sleep(interval)

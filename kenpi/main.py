@@ -70,6 +70,16 @@ def _build_gateway(config, events, library, link, get_coordinator):
             )
         return state
 
+    def wireguard_info(device):
+        if not config.wireguard_network:
+            return None
+        from kenpi.remote.wireguard import client_parameters
+
+        return client_parameters(
+            registry, config.wireguard_network, config.wireguard_port,
+            state_dir / "wireguard" / "server.key", device.device_id,
+        )  # fmt: skip
+
     return GatewayServer(
         registry,
         events,
@@ -79,6 +89,7 @@ def _build_gateway(config, events, library, link, get_coordinator):
         server_context(cert, key),
         remote_networks=networks,
         remote_enabled=remote_state.enabled,
+        wireguard_info=wireguard_info,
     )
 
 

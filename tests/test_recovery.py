@@ -406,20 +406,36 @@ class SftpTests(unittest.TestCase):
         self.assertIn("kenpi@pi.example", argv)
 
     def test_put_uses_partial_then_nonoverwriting_rename(self):
-        dest = self.make({"ls -1": (0, "kenpi-backup-1.kbk\n")})
-        dest.put(Path("/tmp/a.kbk"), "kenpi-backup-2.kbk")
-        batch = self.calls[-1][1]
-        self.assertLess(batch.index("put"), batch.index("rename"))
-        self.assertIn(".kenpi-backup-2.kbk.partial", batch)
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp, "a.kbk")
+            local.write_bytes(b"12345")
+            partial = "/srv/backups/.kenpi-backup-2.kbk.partial"
+            dest = self.make(
+                {
+                    "ls -a1": (0, "kenpi-backup-1.kbk\n"),
+                    "ls -lan": (0, f"-rw-r--r-- ? 1 1 5 Nov 7 20:00 {partial}\n"),
+                }
+            )
+            dest.put(local, "kenpi-backup-2.kbk")
+            batches = [c[1] for c in self.calls]
+            self.assertIn("put", batches[1])
+            self.assertIn("rename", batches[-1])
+            self.assertIn(".kenpi-backup-2.kbk.partial", batches[-1])
+            short = self.make(
+                {"ls -lan": (0, f"-rw-r--r-- ? 1 1 2 Nov 7 20:00 {partial}\n")}
+            )
+            with self.assertRaises(BackupError):
+                short.put(local, "kenpi-backup-3.kbk")
+            self.assertFalse(any("rename" in c[1] for c in self.calls[-3:]))
 
     def test_put_refuses_existing_name(self):
-        dest = self.make({"ls -1": (0, "kenpi-backup-2.kbk\n")})
+        dest = self.make({"ls -a1": (0, "kenpi-backup-2.kbk\n")})
         with self.assertRaises(BackupError):
-            dest.put(Path("/tmp/a.kbk"), "kenpi-backup-2.kbk")
+            dest.put(Path("/nonexistent/a.kbk"), "kenpi-backup-2.kbk")
 
     def test_listing_and_failure(self):
         dest = self.make(
-            {"ls -1": (0, "kenpi-backup-1.kbk\nother\n.kenpi-backup-3.kbk.partial\n")}
+            {"ls -a1": (0, "kenpi-backup-1.kbk\nother\n.kenpi-backup-3.kbk.partial\n")}
         )
         self.assertEqual(dest.list_names(), ["kenpi-backup-1.kbk"])
         self.assertEqual(len(dest.list_partials()), 1)

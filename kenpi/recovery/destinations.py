@@ -124,7 +124,8 @@ class SftpDestination(BackupDestination):
     """Remote SFTP target driven by the OpenSSH ``sftp`` batch mode.
 
     Host keys are verified (StrictHostKeyChecking=yes) against ``known_hosts``; password
-    prompts are disabled. NOT validated against a live server in this repository's tests.
+    prompts are disabled. Uploads go to a hidden partial file, are size-verified, then renamed.
+    Exercised against a real loopback OpenSSH server in tests/test_sftp_live.py.
     """
 
     def __init__(
@@ -155,17 +156,18 @@ class SftpDestination(BackupDestination):
 
     def free_bytes(self) -> int | None:
         try:
-            out = self._batch(f"df -k {self._path}")
+            out = self._batch(f"df {self._path}")
         except BackupError:
             return None
+        # OpenSSH prints "Size Used Avail (root) %Capacity" in 1 KiB units.
         for line in out.splitlines():
             parts = line.split()
-            if len(parts) >= 4 and parts[1].isdigit() and parts[3].isdigit():
-                return int(parts[3]) * 1024
+            if len(parts) >= 5 and all(p.isdigit() for p in parts[:3]):
+                return int(parts[2]) * 1024
         return None
 
     def _names(self) -> list[str]:
-        out = self._batch(f"ls -1 {self._path}")
+        out = self._batch(f"ls -a1 {self._path}")
         return sorted(
             {
                 Path(line.strip()).name
@@ -191,10 +193,23 @@ class SftpDestination(BackupDestination):
             raise BackupError(f"{name} already exists; refusing to overwrite")
         partial = f".{name}.partial"
         # SFTP v3 'rename' fails when the target exists, so it never overwrites.
-        self._batch(
-            f'put "{local}" {self._p(partial)}',
-            f"rename {self._p(partial)} {self._p(name)}",
-        )
+        self._batch(f'put "{local}" {self._p(partial)}')
+        remote_size = self._size(partial)
+        expected = local.stat().st_size
+        if remote_size != expected:
+            self.remove_partial(partial)
+            raise BackupError(
+                f"upload verification failed: remote has {remote_size} of {expected} bytes"
+            )
+        self._batch(f"rename {self._p(partial)} {self._p(name)}")
+
+    def _size(self, name: str) -> int | None:
+        out = self._batch(f"ls -lan {self._p(name)}")
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) >= 9 and parts[-1].endswith(name) and parts[4].isdigit():
+                return int(parts[4])
+        return None
 
     def get(self, name: str, local: Path) -> None:
         if not valid_name(name):
