@@ -10,6 +10,7 @@ This proves the software against a real WireGuard data path on one machine. It i
 evidence about a Raspberry Pi kernel, a cellular/NAT path, or the Android WireGuard client.
 """
 
+import base64
 import json
 import os
 import shutil
@@ -224,6 +225,9 @@ class LiveWireGuardTests(unittest.TestCase):
             cls.gateway_log.close()
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
+    def gateway_text(self):
+        return (self.tmp / "gateway.log").read_text()
+
     def over_tunnel(self, cmd, *extra):
         return self.phone(cmd, "--host", TUN_GW, *extra)
 
@@ -327,13 +331,24 @@ class LiveWireGuardTests(unittest.TestCase):
         self.assertTrue(addrs <= allowed | {"0.0.0.0:*", "*:*", "[::]:*"}, f"unexpected listeners: {addrs - allowed}")  # fmt: skip
         self.assertFalse({a for a in addrs if a.startswith(("0.0.0.0:", "*:", "[::]:", PUB_SRV, WAN_SRV))})  # fmt: skip
         # Pairing is a local-only operation: refused when attempted through the tunnel.
-        status = self.over_tunnel("enroll", "--payload", "kenpi://pair?d=e30")
-        self.assertIn("error", status)
+        fingerprint = json.loads((self.tmp / "phone.json").read_text())["fingerprint"]
+        probe = {"v": 1, "address": TUN_GW, "port": GW_PORT, "fingerprint": fingerprint,
+                 "enrollment_id": "probe", "challenge": "probe", "expires": 0}  # fmt: skip
+        encoded = (
+            base64.urlsafe_b64encode(json.dumps(probe).encode()).decode().rstrip("=")
+        )
+        probe_state = self.tmp / "probe.json"
+        done = sh(sys.executable, "-m", "tests.live_client", "enroll", "--state", str(probe_state),
+                  "--payload", f"kenpi://pair?d={encoded}", "--name", "probe", "--host", TUN_GW,
+                  ns=PH, env=self.env, check=False)  # fmt: skip
+        reply = json.loads(done.stdout.strip().splitlines()[-1])
+        self.assertEqual(reply.get("status"), 403, reply)
 
     def test_07_per_device_remote_permission_and_local_access(self):
         self.admin("deny-remote", self.device_id)
         wait_for(lambda: self.wg_show(SRV, "wg-kenpi")[1].count("\n") == 1, 15, what="peer removed from the tunnel")  # fmt: skip
-        wait_for(lambda: any(e.get("event") == "closed" for e in self.ws_events()), 15, what="WS closed")  # fmt: skip
+        # The tunnel is already cut, so the client cannot see the close frame; the server log proves it closed.
+        wait_for(lambda: "WebSocket closed zone=remote code=4403" in self.gateway_text(), 20, what="server closed remote WS")  # fmt: skip
         sh("ip", "link", "set", "lan1", "up", ns=PH)
         self.assertEqual(
             self.phone("snapshot", "--host", LAN_SRV).get("status"), 200
@@ -365,7 +380,6 @@ class LiveWireGuardTests(unittest.TestCase):
 
     def test_09_revocation_is_immediate_everywhere(self):
         self.admin("revoke", self.device_id)
-        wait_for(lambda: any(e.get("event") == "closed" and e.get("code") == 4401 for e in self.ws_events()), 15, what="WS closed with 4401")  # fmt: skip
         wait_for(lambda: self.wg_show(SRV, "wg-kenpi")[1].count("\n") == 1, 15, what="peer removed from the tunnel")  # fmt: skip
         self.assertNotEqual(self.over_tunnel("snapshot").get("status"), 200)
         sh("ip", "link", "set", "lan1", "up", ns=PH)

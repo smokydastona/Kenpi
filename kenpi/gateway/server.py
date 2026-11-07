@@ -450,6 +450,9 @@ class _Session:
             if unsubscribe:
                 unsubscribe()
             code, reason = self.closing or (1001, "going away")
+            logger.info(
+                "WebSocket closed zone=%s code=%d reason=%s", self.zone, code, reason
+            )
             try:
                 self.writer.write(close_frame(code, reason))
                 await self.writer.drain()
@@ -587,7 +590,10 @@ class _Session:
                 self.closing = (1001, "idle timeout")
             elif not self.g._registry.token_valid(self.token):
                 self.closing = (4401, "token expired or revoked")
-            elif self.zone == "remote" and not self.g._remote_enabled():
+            elif self.zone == "remote" and not (
+                self.g._remote_enabled()
+                and self.g._registry.token_remote_allowed(self.token)
+            ):
                 self.closing = (4403, "remote access disabled")
             elif now >= next_beat:
                 latest = self.g._events.events_after(0, 1)["latest_seq"]

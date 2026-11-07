@@ -475,3 +475,9 @@ class DeviceRegistry:
                 return False
             device = state["devices"].get(record["device"])
             return device is not None and device["revoked_at"] is None
+
+    def token_remote_allowed(self, access_token: str) -> bool:
+        with self._txn(False) as state:
+            record = state["access"].get(self._hash(access_token))
+            device = state["devices"].get(record["device"]) if record else None
+            return bool(device and device["allow_remote"])
