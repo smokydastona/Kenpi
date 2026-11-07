@@ -1,0 +1,166 @@
+name: Release bundle
+
+# One downloadable artifact per commit containing every build output.
+# Version = VERSION (MAJOR.MINOR) + "." + commit count, so it increases with
+# every commit automatically. The component builds here do not replace ci.yml;
+# they only package. Nothing in the bundle is hardware-verified.
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bundle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      count: ${{ steps.v.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        run: |
+          count=$(git rev-list --count HEAD)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "version=$(python3 -m kenpi.tools.release version "$count")" >> "$GITHUB_OUTPUT"
+
+  python:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m kenpi.tools.release stamp "${{ needs.version.outputs.version }}"
+      - run: python -m pip wheel --no-deps --wheel-dir out .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: component-python
+          path: out/*.whl
+          if-no-files-found: error
+
+  firmware:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install platformio
+      - name: Build ESP32-S3 firmware
+        working-directory: firmware
+        run: pio run -e esp32s3
+      - name: Collect binaries
+        run: |
+          mkdir out
+          cp firmware/.pio/build/esp32s3/firmware.bin out/kenpi-controller-${{ needs.version.outputs.version }}.bin
+          for f in bootloader partitions; do
+            [ -f firmware/.pio/build/esp32s3/$f.bin ] && cp firmware/.pio/build/esp32s3/$f.bin out/
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: component-firmware
+          path: out/*
+          if-no-files-found: error
+
+  android:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Build debug APK
+        working-directory: android
+        env:
+          KENPI_VERSION: ${{ needs.version.outputs.version }}
+          KENPI_VERSION_CODE: ${{ needs.version.outputs.count }}
+        run: ./gradlew assembleDebug --stacktrace
+      - name: Collect APK
+        run: |
+          mkdir out
+          cp android/app/build/outputs/apk/debug/*.apk out/kenpi-companion-${{ needs.version.outputs.version }}.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: component-android
+          path: out/*.apk
+          if-no-files-found: error
+
+  os-image:
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - name: ARM64 emulation prerequisites
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-static binfmt-support
+      - name: Build image with pi-gen
+        run: os-image/build.sh
+      - name: Collect and compress image
+        run: |
+          mkdir out
+          shopt -s nullglob
+          for f in os-image/.pi-gen/deploy/*.img os-image/.pi-gen/deploy/*.zip; do
+            sudo cp "$f" out/
+          done
+          sudo chown -R "$USER" out
+          for f in out/*.img; do xz -T0 "$f"; done
+          ls -lh out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: component-os-image
+          path: out/*
+          if-no-files-found: error
+
+  bundle:
+    needs: [version, python, firmware, android, os-image]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch component artifacts that were built
+        uses: actions/download-artifact@v4
+        with:
+          pattern: component-*
+          path: parts
+      - name: Arrange components
+        run: |
+          mkdir -p artifacts/deploy
+          for c in python firmware android os-image; do
+            if [ -d "parts/component-$c" ]; then mv "parts/component-$c" "artifacts/$c"; fi
+          done
+          cp deploy/install-status.sh deploy/rollback-status.sh deploy/kenpi-status.service deploy/status.toml artifacts/deploy/
+          cp config/kenpi.example.toml artifacts/deploy/
+          cp README.md LICENSE artifacts/deploy/
+      - name: Assemble single bundle
+        id: assemble
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          python -m kenpi.tools.release assemble artifacts "dist/kenpi-$v.zip" "$v" "$GITHUB_SHA"
+      - name: Unpack so the artifact download is one zip
+        if: ${{ always() && hashFiles('dist/*.zip') != '' }}
+        run: unzip -q dist/kenpi-*.zip -d "bundle"
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && hashFiles('dist/*.zip') != '' }}
+        with:
+          name: kenpi-${{ needs.version.outputs.version }}
+          path: bundle
+          retention-days: 90

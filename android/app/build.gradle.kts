@@ -12,8 +12,8 @@ android {
         applicationId = "com.kenpi.companion"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = System.getenv("KENPI_VERSION_CODE")?.toIntOrNull() ?: 1
+        versionName = System.getenv("KENPI_VERSION") ?: "0.0.0-dev"
     }
 
     buildFeatures {

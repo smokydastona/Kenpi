@@ -96,3 +96,31 @@ An optional reproducible pi-gen based build that preinstalls and enables this
 same status service on a fresh Raspberry Pi OS Lite (64-bit) image is in
 `os-image/`. It changes nothing about what the service does; see
 `os-image/README.md` for exact scope, safe defaults, and build instructions.
+
+## Release bundle (CI)
+
+`.github/workflows/bundle.yml` runs on every push and uploads one artifact,
+`kenpi-<version>`, which downloads as a single zip containing:
+
+| Folder | Contents |
+|---|---|
+| `python/` | kenpi wheel |
+| `firmware/` | ESP32-S3 controller binaries (`pio run -e esp32s3`) |
+| `android/` | companion APK (debug-signed; not a Play Store release) |
+| `os-image/` | Raspberry Pi OS image built with pi-gen |
+| `deploy/` | install/rollback scripts, systemd unit, example config |
+| `manifest.json`, `SHA256SUMS` | versions, commit, per-file checksums |
+
+The version is `VERSION` (MAJOR.MINOR, edit to bump a release line) plus the
+commit count, e.g. `0.2.57`, so every commit gets a higher number with no manual
+edits. The same number is stamped into the wheel and the APK (`versionName`,
+`versionCode` = commit count). The OS image installs the committed snapshot, so
+its embedded Python package reports the version in `pyproject.toml`, not the
+stamped one.
+
+If any component fails to build, the manifest marks it `missing`, the bundle
+job fails, and a partial bundle is still uploaded for inspection. Status: this
+workflow has not yet been run on GitHub; the ESP32-S3 build and the pi-gen image
+build in particular have never completed in this project's environment.
+Retention is 90 days. The bundle contains build outputs only; nothing in it is
+hardware-verified.
