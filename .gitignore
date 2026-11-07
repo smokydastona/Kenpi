@@ -13,3 +13,4 @@ captures/*
 !captures/README.md
 config/kenpi.yaml
 *.log
+os-image/.pi-gen/

@@ -89,3 +89,10 @@ The Android companion additionally needs a separately provisioned private HTTPS
 gateway; the installer does not expose the unauthenticated API to Wi-Fi. Camera
 credentials, protocol drivers, preview, ESP32 power coordination, and physical
 Kenwood integration are not supplied by this status installer.
+
+## Pi OS image (optional)
+
+An optional reproducible pi-gen based build that preinstalls and enables this
+same status service on a fresh Raspberry Pi OS Lite (64-bit) image is in
+`os-image/`. It changes nothing about what the service does; see
+`os-image/README.md` for exact scope, safe defaults, and build instructions.
