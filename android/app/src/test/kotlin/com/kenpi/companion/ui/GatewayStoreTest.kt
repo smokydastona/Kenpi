@@ -166,6 +166,104 @@ class GatewayStoreTest {
         }
     }
 
+    @Test
+    fun updatingBaseUrlPersistsTheNewValue() {
+        val persisted = mutableListOf<String>()
+        val store = GatewayStore(
+            fetchSnapshot = { snapshot },
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
+            persistBaseUrl = { persisted.add(it) },
+        )
+        try {
+            store.accept(GatewayIntent.UpdateBaseUrl("https://gateway.example"))
+            store.accept(GatewayIntent.UpdateBaseUrl("https://other.example"))
+
+            assertEquals(listOf("https://gateway.example", "https://other.example"), persisted)
+        } finally {
+            store.close()
+        }
+    }
+
+    @Test
+    fun restartingWithInitialBaseUrlDoesNotPersistOnConstruction() {
+        val persisted = mutableListOf<String>()
+        val store = GatewayStore(
+            initialBaseUrl = "https://restored.example",
+            fetchSnapshot = { snapshot },
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
+            persistBaseUrl = { persisted.add(it) },
+        )
+        try {
+            assertEquals("https://restored.example", store.state.value.baseUrl)
+            assertTrue(persisted.isEmpty())
+        } finally {
+            store.close()
+        }
+    }
+
+    @Test
+    fun successfulRefreshRecordsClockTimestampForStalenessChecks() {
+        var clock = 1_000L
+        val store = GatewayStore(
+            fetchSnapshot = { snapshot },
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
+            nowMillis = { clock },
+        )
+        try {
+            store.accept(GatewayIntent.UpdateBaseUrl("https://gateway.example"))
+            store.accept(GatewayIntent.Refresh)
+
+            assertEquals(1_000L, store.state.value.lastUpdatedAtMillis)
+        } finally {
+            store.close()
+        }
+    }
+
+    @Test
+    fun failedRefreshClearsLastUpdatedAtMillis() {
+        var fail = false
+        val store = GatewayStore(
+            fetchSnapshot = {
+                if (fail) error("Gateway returned HTTP 503")
+                snapshot
+            },
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
+            nowMillis = { 1_000L },
+        )
+        try {
+            store.accept(GatewayIntent.UpdateBaseUrl("https://gateway.example"))
+            store.accept(GatewayIntent.Refresh)
+            assertEquals(1_000L, store.state.value.lastUpdatedAtMillis)
+
+            fail = true
+            store.accept(GatewayIntent.Refresh)
+
+            assertNull(store.state.value.lastUpdatedAtMillis)
+        } finally {
+            store.close()
+        }
+    }
+
+    @Test
+    fun isSnapshotStaleIsFalseWithoutAPriorUpdate() {
+        assertFalse(isSnapshotStale(nowMillis = 10_000L, lastUpdatedAtMillis = null))
+    }
+
+    @Test
+    fun isSnapshotStaleIsFalseJustAfterAnUpdate() {
+        assertFalse(isSnapshotStale(nowMillis = 1_500L, lastUpdatedAtMillis = 1_000L))
+    }
+
+    @Test
+    fun isSnapshotStaleIsTrueAfterTheThresholdElapses() {
+        assertTrue(
+            isSnapshotStale(
+                nowMillis = 1_000L + STALE_DATA_THRESHOLD_MILLIS + 1,
+                lastUpdatedAtMillis = 1_000L,
+            ),
+        )
+    }
+
     private fun withStore(
         fetchSnapshot: suspend (String) -> GatewaySnapshot,
         assertions: (GatewayStore) -> Unit,
