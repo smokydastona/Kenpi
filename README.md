@@ -116,6 +116,10 @@ It is an optional diagnostic client, not an assumed Kenwood display solution.
 See [Android companion](docs/android-companion.md) for build instructions and
 the API's current remote-access limitations.
 
+An optional, off-by-default voice/AI assistant and diagnostics engine can be
+toggled with `kenpi-features enable|disable assistant`; see
+[Assistant](docs/assistant.md).
+
 The independent auxiliary controller firmware (protocol port + vehicle power
 state machine, no hardware I/O) is in [`firmware/`](firmware/). It mirrors
 `kenpi/vehicle/protocol.py` in C++ and ships with no default GPIO assignments;

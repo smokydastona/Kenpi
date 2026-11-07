@@ -7,6 +7,7 @@ import com.kenpi.gateway.GatewayApi
 import com.kenpi.gateway.GatewayException
 import com.kenpi.gateway.LiveChannel
 import com.kenpi.gateway.LiveState
+import com.kenpi.gateway.LocalHelper
 import com.kenpi.gateway.PairingException
 import com.kenpi.gateway.PairingPayload
 import com.kenpi.gateway.PairingProgress
@@ -35,6 +36,9 @@ data class Ui(
     val wireGuard: WireGuardParameters? = null,
     val wireGuardNote: String? = null,
     val log: List<String> = emptyList(),
+    val chat: List<Pair<String, String>> = emptyList(),
+    val assistantBusy: Boolean = false,
+    val kenpiLogs: List<String> = emptyList(),
 )
 
 class AppModel(app: Application) : AndroidViewModel(app) {
@@ -47,6 +51,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private var session: Session? = null
     private var pairJob: Job? = null
     private var watch: Job? = null
+    private var api: GatewayApi? = null
+    private var lastReported: String? = null
 
     init {
         store.load()?.let { connect() }
@@ -99,6 +105,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         watch?.cancel()
         val http = PinnedTls.client(creds.fingerprint)
         val api = GatewayApi(creds.host, creds.port, http)
+        this.api = api
         val s = Session(api, KeystoreDeviceKey.loadOrCreate(), store)
         session = s
         val live = LiveChannel(creds.host, creds.port, PinnedTls.client(creds.fingerprint, 0), s, viewModelScope)
@@ -112,6 +119,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 }
                 if (it::class != _live.value::class) note("Connection: ${it::class.simpleName}")
                 _live.value = it
+                if (it is LiveState.Live || it is LiveState.Disconnected || it is LiveState.RemoteDenied) uploadLogs()
             }
         }
         live.start()
@@ -121,6 +129,65 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 _ui.value = _ui.value.copy(wireGuard = wg, wireGuardNote = if (wg == null) "Remote access is not enabled on the gateway" else null)
             } catch (e: Exception) {
                 _ui.value = _ui.value.copy(wireGuardNote = "Not available: ${e.message}")
+            }
+        }
+    }
+
+    private fun appVersion(): String = try {
+        val app = getApplication<Application>()
+        app.packageManager.getPackageInfo(app.packageName, 0).versionName.orEmpty()
+    } catch (e: Exception) {
+        "unknown"
+    }
+
+    private fun connectionLabel(): String = _live.value.let { it::class.simpleName.orEmpty() + (if (it is LiveState.Disconnected) ": ${it.reason}" else "") }
+
+    /** Shares this phone's recent connection log with Kenpi to help diagnose problems. Best effort. */
+    fun uploadLogs() {
+        val api = api ?: return
+        val s = session ?: return
+        val label = connectionLabel()
+        if (label == lastReported) return
+        viewModelScope.launch {
+            try {
+                api.uploadLogs(s.accessToken(), appVersion(), label, _ui.value.log.takeLast(50))
+                lastReported = label
+            } catch (e: Exception) {
+                // Expected while disconnected; the next state change retries.
+            }
+        }
+    }
+
+    fun ask(text: String) {
+        if (text.isBlank() || _ui.value.assistantBusy) return
+        val chat = _ui.value.chat + ("You" to text)
+        _ui.value = _ui.value.copy(chat = chat, assistantBusy = true)
+        viewModelScope.launch {
+            val reply = try {
+                val api = api ?: throw GatewayException(0, "not_connected")
+                val body = api.assistantAsk(session!!.accessToken(), text)
+                (body["message"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: body.toString()
+            } catch (e: GatewayException) {
+                when (e.code) {
+                    "scope_required" -> "This phone was not granted the assistant.use scope. Re-pair with --scopes status.read,vehicle.read,assistant.use."
+                    "feature_disabled" -> "The assistant is switched off on Kenpi. Turn it on with kenpi-features enable assistant."
+                    else -> LocalHelper.explain(true, _live.value) + " (${e.code})"
+                }
+            } catch (e: java.io.IOException) {
+                LocalHelper.explain(true, _live.value)
+            }
+            _ui.value = _ui.value.copy(chat = _ui.value.chat + ("Kenpi" to reply), assistantBusy = false)
+        }
+    }
+
+    fun fetchKenpiLogs() {
+        val api = api ?: return
+        viewModelScope.launch {
+            try {
+                val lines = api.kenpiLogs(session!!.accessToken())["lines"] as? kotlinx.serialization.json.JsonArray
+                _ui.value = _ui.value.copy(kenpiLogs = lines?.map { (it as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty() } ?: emptyList())
+            } catch (e: Exception) {
+                note("Could not fetch Kenpi logs: ${e.message}")
             }
         }
     }

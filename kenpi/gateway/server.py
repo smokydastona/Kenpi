@@ -105,7 +105,11 @@ class GatewayServer:
         queue_size: int = 64,
         wireguard_info: Callable[[Device], dict | None] = lambda device: None,
         rebind_seconds: float = 5.0,
+        assistant_handler: Callable[[Device, str, str, dict], tuple[int, dict]]
+        | None = None,
     ) -> None:
+        self._assistant_handler = assistant_handler
+        self._live: dict[int, tuple[str, str, float]] = {}
         for host in hosts:
             validate_bind_host(host)
         if ssl_context is None and not all(
@@ -131,6 +135,13 @@ class GatewayServer:
         self._wireguard_info, self._rebind_seconds = wireguard_info, rebind_seconds
         self._unbound: list[str] = []
         self._rebinder: asyncio.Task[None] | None = None
+
+    def connected_devices(self) -> list[dict[str, object]]:
+        """Devices with a live, authenticated WebSocket right now."""
+        return [
+            {"device_id": device_id, "name": name, "since": since}
+            for device_id, name, since in self._live.values()
+        ]
 
     async def _bind(self, host: str) -> bool:
         try:
@@ -264,7 +275,8 @@ class GatewayServer:
                 length = int(headers.get("content-length", "0"))
             except ValueError:
                 length = -1
-            if not 0 <= length <= 4096:
+            limit = 65536 if path.startswith("/api/v1/assistant/") else 4096
+            if not 0 <= length <= limit:
                 await self._respond(writer, 413, {"error": "bad_length"})
                 return
             try:
@@ -324,6 +336,15 @@ class GatewayServer:
         if method == "GET" and path == "/api/v1/snapshot":
             device = self._authenticated(headers, zone)
             return 200, self._snapshot_message(device)
+        if path.startswith("/api/v1/assistant/"):
+            device = self._authenticated(headers, zone)
+            if "assistant.use" not in device.scopes:
+                return 403, {"error": "scope_required"}
+            if self._assistant_handler is None:
+                return 404, {"error": "feature_disabled"}
+            return await asyncio.to_thread(
+                self._assistant_handler, device, method, path, body
+            )
         if method == "GET" and path == "/api/v1/wireguard":
             device = self._authenticated(headers, zone)
             info = self._wireguard_info(device)
@@ -447,6 +468,7 @@ class _Session:
         except (ConnectionError, asyncio.IncompleteReadError):
             pass
         finally:
+            self.g._live.pop(id(self), None)
             if unsubscribe:
                 unsubscribe()
             code, reason = self.closing or (1001, "going away")
@@ -473,6 +495,11 @@ class _Session:
             self.device = self._authenticate(token)
             self.token = token
             self.hello = message
+            self.g._live[id(self)] = (
+                self.device.device_id,
+                self.device.name,
+                time.time(),
+            )
         except (AuthError, ValueError, asyncio.TimeoutError, WebSocketError) as exc:
             code = getattr(exc, "code", "auth_timeout")
             self.g._registry.audit("ws_auth_failed", peer=self.peer, why=str(code))

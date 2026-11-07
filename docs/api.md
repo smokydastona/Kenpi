@@ -18,6 +18,11 @@ and sockets time out after 10 s. A disabled capability returns a structured
 | `/api/v1/vehicle` | `enabled: false` unless `vehicle_uart_enabled`; otherwise live link snapshot (link state, power state, ignition, heartbeat age, shutdown request/ack, rejected/replayed frame counts). |
 | `/api/v1/media` | Downloaded copies in `media_directory` plus storage space; camera listing reported disabled. |
 | `/api/v1/media/<name>` | Streams a local copy. Names are validated; symlinks and traversal return `404`. |
+| `/api/v1/features` | Optional feature toggle states (`assistant` is off by default). |
+| `/api/v1/voice/*`, `/api/v1/intelligence/*`, `/api/v1/diagnostics/{report,history}` | Only when the optional assistant is enabled, otherwise `404 feature_disabled`. Read-only; see [Assistant](assistant.md). |
+
+Authenticated gateway routes under `/api/v1/assistant/*` (scope `assistant.use`) are documented in
+[Assistant](assistant.md#companion-phone-awareness-and-log-exchange).
 
 Remote access remains out of scope: a separate authenticated TLS gateway is
 required (see `docs/android-companion.md`).

@@ -51,6 +51,17 @@
       <h2 id="vehicle-title">Vehicle</h2>
       <div id="vehicle-status" class="card-grid"></div>
     </section>
+
+    <section id="screen-assistant" class="screen" data-screen="assistant" hidden aria-labelledby="assistant-title">
+      <h2 id="assistant-title">Assistant</h2>
+      <p class="subtle">Optional feature. Characters are switched by voice or with <code>kenpi-assist character</code>; this screen is read-only.</p>
+      <h3>Character</h3>
+      <div id="assistant-characters" class="card-grid"></div>
+      <h3>Voice engines</h3>
+      <dl id="assistant-voice"></dl>
+      <h3>Diagnostics</h3>
+      <dl id="assistant-diagnostics"></dl>
+    </section>
   </main>
   <nav id="tabs" aria-label="Screens">
     <button type="button" data-target="main" class="tab" aria-current="page">Main</button>
@@ -58,6 +69,7 @@
     <button type="button" data-target="media" class="tab">Media</button>
     <button type="button" data-target="system" class="tab">System</button>
     <button type="button" data-target="vehicle" class="tab">Vehicle</button>
+    <button type="button" data-target="assistant" class="tab" id="tab-assistant" hidden>Assistant</button>
   </nav>
   <footer class="subtle">
     This dashboard reports only capabilities returned by the running service.

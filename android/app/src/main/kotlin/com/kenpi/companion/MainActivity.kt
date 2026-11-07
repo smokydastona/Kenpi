@@ -70,7 +70,7 @@ fun KenpiTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = scheme, content = content)
 }
 
-private enum class Tab(val label: String) { Dashboard("Dashboard"), Camera("Camera"), Vehicle("Vehicle"), Health("Health"), More("More") }
+private enum class Tab(val label: String) { Dashboard("Dashboard"), Camera("Camera"), Vehicle("Vehicle"), Health("Health"), Assistant("Assistant"), More("More") }
 
 @Composable
 fun KenpiApp(model: AppModel) {
@@ -142,6 +142,7 @@ private fun PairedScreen(model: AppModel) {
                 Tab.Camera -> Scope("Camera", state?.get("camera"), "Live preview, media browsing and recording control are unavailable: the A810 Lite protocol is not verified.")
                 Tab.Vehicle -> Scope("Vehicle", state?.get("vehicle"), null)
                 Tab.Health -> Scope("System health", state?.get("status"), null)
+                Tab.Assistant -> AssistantTab(model, ui, live)
                 Tab.More -> More(model, ui, state?.get("media"))
             }
         }
@@ -200,4 +201,27 @@ private fun More(model: AppModel, ui: Ui, media: kotlinx.serialization.json.Json
     OutlinedButton(onClick = model::reconnect, modifier = Modifier.fillMaxWidth()) { Text("Reconnect now") }
     OutlinedButton(onClick = model::unpair, modifier = Modifier.fillMaxWidth()) { Text("Forget this gateway on this device") }
     Text("Forgetting is local only. Ask the administrator to revoke the device on the gateway.", style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
+private fun AssistantTab(model: AppModel, ui: Ui, live: LiveState) {
+    var text by rememberSaveable { mutableStateOf("") }
+    val reachable = com.kenpi.gateway.LocalHelper.assistantReachable(live)
+    Card(Modifier.fillMaxWidth()) {
+        Text(
+            if (reachable) "Connected to Kenpi. Ask for setup help or troubleshooting. Actions are never run from the phone."
+            else com.kenpi.gateway.LocalHelper.explain(true, live),
+            Modifier.padding(12.dp),
+        )
+    }
+    ui.chat.forEach { (who, message) -> Section(who, listOf("" to message)) }
+    OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("Ask Kenpi") }, modifier = Modifier.fillMaxWidth())
+    Button(
+        onClick = { model.ask(text); text = "" },
+        enabled = reachable && !ui.assistantBusy && text.isNotBlank(),
+        modifier = Modifier.fillMaxWidth(),
+    ) { Text(if (ui.assistantBusy) "Thinking…" else "Send") }
+    OutlinedButton(onClick = model::fetchKenpiLogs, enabled = reachable, modifier = Modifier.fillMaxWidth()) { Text("Fetch Kenpi logs") }
+    OutlinedButton(onClick = model::uploadLogs, enabled = reachable, modifier = Modifier.fillMaxWidth()) { Text("Send this phone's logs to Kenpi") }
+    if (ui.kenpiLogs.isNotEmpty()) Section("Kenpi logs", ui.kenpiLogs.takeLast(20).map { "•" to it })
 }

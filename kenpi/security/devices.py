@@ -29,7 +29,9 @@ CHALLENGE_TTL_SECONDS = 300
 COLLECT_WINDOW_SECONDS = 600
 ACCESS_TTL_SECONDS = 300
 REFRESH_TTL_SECONDS = 90 * 24 * 3600
-SCOPES = frozenset({"status.read", "vehicle.read", "camera.read", "media.read"})
+SCOPES = frozenset(
+    {"status.read", "vehicle.read", "camera.read", "media.read", "assistant.use"}
+)
 DEFAULT_SCOPES = frozenset({"status.read", "vehicle.read"})
 ENROLL_CONTEXT = b"kenpi-enroll-v1"
 COLLECT_CONTEXT = b"kenpi-collect-v1"

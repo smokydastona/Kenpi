@@ -121,6 +121,31 @@ class GatewayApi(
             ),
         )
 
+    private suspend fun postAuth(path: String, body: JsonObject, accessToken: String) =
+        call(Request.Builder().url(url(path)).header("Authorization", "Bearer $accessToken").post(body.toString().toRequestBody(json)).build())
+
+    /** Needs the assistant.use scope; the gateway never lets the phone approve actions. */
+    suspend fun assistantAsk(accessToken: String, text: String): JsonObject =
+        postAuth("/api/v1/assistant/ask", buildJsonObject { put("text", text) }, accessToken)
+
+    suspend fun assistantStatus(accessToken: String) = get("/api/v1/assistant/status", accessToken)
+
+    suspend fun assistantDiagnostics(accessToken: String) = get("/api/v1/assistant/diagnostics", accessToken)
+
+    suspend fun kenpiLogs(accessToken: String) = get("/api/v1/assistant/logs", accessToken)
+
+    /** Phone-side lines are redacted again by the gateway, but callers should not include secrets. */
+    suspend fun uploadLogs(accessToken: String, appVersion: String, connection: String, lines: List<String>) =
+        postAuth(
+            "/api/v1/assistant/logs",
+            buildJsonObject {
+                put("app_version", appVersion.take(32))
+                put("connection", connection.take(64))
+                put("lines", JsonArray(lines.takeLast(200).map { JsonPrimitive(it.take(300)) }))
+            },
+            accessToken,
+        )
+
     suspend fun snapshot(accessToken: String): Snapshot = parseSnapshot(get("/api/v1/snapshot", accessToken))
 
     suspend fun wireGuard(accessToken: String): WireGuardParameters? {
