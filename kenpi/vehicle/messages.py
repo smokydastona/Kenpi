@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 from kenpi.core.errors import ProtocolError
+from kenpi.vehicle.kline import READ_ONLY_SERVICES
 from kenpi.vehicle.protocol import VehicleMessage
 
 
@@ -20,6 +21,8 @@ class MessageType(IntEnum):
     POWER_STATE = 0x02  # controller -> Pi, u8 PowerState, u8 flags
     SHUTDOWN_REQUEST = 0x03  # controller -> Pi, u16 grace_seconds
     SHUTDOWN_ACK = 0x04  # Pi -> controller, empty
+    DIAG_REQUEST = 0x05  # Pi -> controller, u16 request_id, u8 service[, u8 pid]
+    DIAG_RESPONSE = 0x06  # controller -> Pi, u16 request_id, u8 status, data
 
 
 class PowerState(IntEnum):
@@ -62,7 +65,70 @@ class ShutdownAck:
     pass
 
 
-TypedMessage = Heartbeat | PowerStateReport | ShutdownRequest | ShutdownAck
+class DiagnosticStatus(IntEnum):
+    OK = 0
+    TIMEOUT = 1
+    NEGATIVE_RESPONSE = 2
+    BUS_UNAVAILABLE = 3
+    REJECTED = 4
+
+
+MAX_DIAG_DATA = 32
+_PID_SERVICES = frozenset({0x01, 0x02, 0x09})
+
+
+@dataclass(frozen=True, slots=True)
+class DiagnosticRequest:
+    """Read-only OBD-II request relayed to the vehicle bus by the controller.
+
+    Only services 01, 02, 03 and 09 are representable; the controller must
+    refuse anything else as well.
+    """
+
+    request_id: int
+    service: int
+    pid: int | None = None
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.request_id <= 0xFFFF:
+            raise ProtocolError("request_id must fit in two bytes")
+        if self.service not in READ_ONLY_SERVICES:
+            raise ProtocolError(f"service 0x{self.service:02X} is not read-only")
+        if self.service in _PID_SERVICES:
+            if self.pid is None or not 0 <= self.pid <= 0xFF:
+                raise ProtocolError("this service needs a one-byte pid")
+        elif self.pid is not None:
+            raise ProtocolError("this service takes no pid")
+
+
+@dataclass(frozen=True, slots=True)
+class DiagnosticResponse:
+    request_id: int
+    status: DiagnosticStatus
+    data: bytes = b""
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.request_id <= 0xFFFF:
+            raise ProtocolError("request_id must fit in two bytes")
+        if len(self.data) > MAX_DIAG_DATA:
+            raise ProtocolError("diagnostic data too long")
+        if self.data and self.status not in (
+            DiagnosticStatus.OK,
+            DiagnosticStatus.NEGATIVE_RESPONSE,
+        ):
+            raise ProtocolError("only OK and negative responses carry data")
+        if self.status is DiagnosticStatus.OK and not self.data:
+            raise ProtocolError("an OK diagnostic response must carry data")
+
+
+TypedMessage = (
+    Heartbeat
+    | PowerStateReport
+    | ShutdownRequest
+    | ShutdownAck
+    | DiagnosticRequest
+    | DiagnosticResponse
+)
 
 
 def to_frame_message(message: TypedMessage, sequence: int) -> VehicleMessage:
@@ -89,6 +155,19 @@ def to_frame_message(message: TypedMessage, sequence: int) -> VehicleMessage:
         )
     if isinstance(message, ShutdownAck):
         return VehicleMessage(MessageType.SHUTDOWN_ACK, sequence)
+    if isinstance(message, DiagnosticRequest):
+        body = message.request_id.to_bytes(2, "big") + bytes([message.service])
+        if message.pid is not None:
+            body += bytes([message.pid])
+        return VehicleMessage(MessageType.DIAG_REQUEST, sequence, body)
+    if isinstance(message, DiagnosticResponse):
+        return VehicleMessage(
+            MessageType.DIAG_RESPONSE,
+            sequence,
+            message.request_id.to_bytes(2, "big")
+            + bytes([int(message.status)])
+            + message.data,
+        )
     raise ProtocolError("unsupported message object")
 
 
@@ -108,6 +187,20 @@ def from_frame_message(frame: VehicleMessage) -> TypedMessage:
         return ShutdownRequest(int.from_bytes(payload, "big"))
     if frame.message_type == MessageType.SHUTDOWN_ACK and not payload:
         return ShutdownAck()
+    if frame.message_type == MessageType.DIAG_REQUEST and len(payload) in (3, 4):
+        return DiagnosticRequest(
+            int.from_bytes(payload[:2], "big"),
+            payload[2],
+            payload[3] if len(payload) == 4 else None,
+        )
+    if frame.message_type == MessageType.DIAG_RESPONSE and len(payload) >= 3:
+        if payload[2] not in set(int(x) for x in DiagnosticStatus):
+            raise ProtocolError("unknown diagnostic status")
+        return DiagnosticResponse(
+            int.from_bytes(payload[:2], "big"),
+            DiagnosticStatus(payload[2]),
+            bytes(payload[3:]),
+        )
     raise ProtocolError(
         f"unknown message type {frame.message_type} or invalid payload length"
     )

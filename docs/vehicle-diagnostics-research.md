@@ -60,3 +60,29 @@ claim vehicle diagnostics.
 2. Bench the transceiver circuit against a K-Line simulator before the car.
 3. Send a single mode 01 PID 00 request and record the raw bytes in a sanitized
    capture; only then add replay tests from that capture.
+
+## Relay protocol (Pi <-> Heltec controller)
+
+Added to the Kenpi vehicle link, mirrored in Python (`kenpi/vehicle/messages.py`)
+and C++ (`firmware/include/kenpi/messages.h`) and locked by the shared fixtures
+in `protocol/vehicle_frames.txt` (7 fixtures, all checked by both test suites):
+
+- `DIAG_REQUEST` (0x05, Pi -> controller): `u16 request_id, u8 service[, u8 pid]`.
+  Only services 01, 02, 03, 09 are representable; 01/02/09 need a pid, 03 takes
+  none. The Python constructor and the C++ `ParseDiagnosticRequest` both reject
+  everything else, so the controller is required to refuse it too.
+- `DIAG_RESPONSE` (0x06, controller -> Pi): `u16 request_id, u8 status, data`
+  with status OK / TIMEOUT / NEGATIVE_RESPONSE / BUS_UNAVAILABLE / REJECTED.
+  OK must carry data; only OK and negative responses may.
+
+`VehicleLinkService.diagnose(service, pid, timeout)` sends one request at a time
+(only while the controller link is `connected`), matches the response by
+`request_id` and returns the controller-reported status, raw hex and, for the
+three known PIDs, a decoded value. A missing answer is `link_timeout`, never a
+value. Tested with an in-memory stream.
+
+Still **not** done: the firmware does not implement the K-Line side (no
+transceiver driver, no 5-baud/fast init, no timing), no pins are assigned,
+nothing calls `diagnose()` from the assistant, API or UI, and nothing has been
+run against a Heltec board or a car. Full vehicle diagnostics therefore does not
+exist yet; this is the verified Pi/controller message contract it will use.

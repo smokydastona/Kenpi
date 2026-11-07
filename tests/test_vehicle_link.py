@@ -12,6 +12,9 @@ from kenpi.vehicle.link import (
     VehicleLinkService,
 )
 from kenpi.vehicle.messages import (
+    DiagnosticRequest,
+    DiagnosticResponse,
+    DiagnosticStatus,
     Heartbeat,
     PowerState,
     PowerStateReport,
@@ -33,6 +36,10 @@ TYPED = {
     "power_fault_no_ignition": PowerStateReport(PowerState.FAULT, False),
     "shutdown_request": ShutdownRequest(30),
     "shutdown_ack": ShutdownAck(),
+    "diag_request": DiagnosticRequest(7, 1, 0x0C),
+    "diag_response": DiagnosticResponse(
+        7, DiagnosticStatus.OK, bytes.fromhex("410c1af8")
+    ),
 }
 
 
@@ -253,3 +260,89 @@ class SerialPortTests(unittest.IsolatedAsyncioTestCase):
 
 async def _accept() -> bool:
     return True
+
+
+class DiagnosticMessageTests(unittest.TestCase):
+    def test_non_read_only_requests_cannot_be_built_or_decoded(self) -> None:
+        from kenpi.core.errors import ProtocolError
+        from kenpi.vehicle.protocol import VehicleMessage
+
+        for service in (0x04, 0x08, 0x10, 0x27, 0x2E, 0x31, 0x34, 0x3B):
+            with self.assertRaises(ProtocolError):
+                DiagnosticRequest(1, service, 0)
+            with self.assertRaises(ProtocolError):
+                from_frame_message(VehicleMessage(5, 1, bytes([0, 1, service, 0])))
+        with self.assertRaises(ProtocolError):
+            DiagnosticRequest(1, 3, 0)
+        with self.assertRaises(ProtocolError):
+            DiagnosticRequest(1, 1)
+
+    def test_response_rules(self) -> None:
+        from kenpi.core.errors import ProtocolError
+
+        with self.assertRaises(ProtocolError):
+            DiagnosticResponse(1, DiagnosticStatus.OK)
+        with self.assertRaises(ProtocolError):
+            DiagnosticResponse(1, DiagnosticStatus.TIMEOUT, b"\x01")
+        self.assertEqual(
+            from_frame_message(
+                to_frame_message(DiagnosticResponse(2, DiagnosticStatus.TIMEOUT), 1)
+            ),
+            DiagnosticResponse(2, DiagnosticStatus.TIMEOUT),
+        )
+
+
+class DiagnoseTests(unittest.IsolatedAsyncioTestCase):
+    async def _connected(self) -> tuple[VehicleLinkService, FakeStream]:
+        stream = FakeStream()
+        service = VehicleLinkService(VehicleCoordinator(), lambda: stream)
+        await service.start()
+        stream.inbox.put_nowait(encode_message(to_frame_message(Heartbeat(1), 1)))
+        for _ in range(5):
+            await asyncio.sleep(0)
+        return service, stream
+
+    async def test_round_trip_decodes_and_matches_request_id(self) -> None:
+        service, stream = await self._connected()
+        task = asyncio.create_task(service.diagnose(0x01, 0x0C, timeout=2))
+        for _ in range(5):
+            await asyncio.sleep(0)
+        sent = from_frame_message(VehicleMessageDecoder().feed(stream.written[-1])[0])
+        self.assertEqual(sent, DiagnosticRequest(1, 0x01, 0x0C))
+        wrong = DiagnosticResponse(99, DiagnosticStatus.OK, bytes.fromhex("410c0000"))
+        right = DiagnosticResponse(1, DiagnosticStatus.OK, bytes.fromhex("410c1af8"))
+        stream.inbox.put_nowait(encode_message(to_frame_message(wrong, 2)))
+        stream.inbox.put_nowait(encode_message(to_frame_message(right, 3)))
+        result = await task
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(
+            result["decoded"], {"name": "engine_speed", "value": 1726.0, "unit": "rpm"}
+        )
+        await service.stop()
+
+    async def test_controller_error_and_timeout_are_not_values(self) -> None:
+        service, stream = await self._connected()
+        task = asyncio.create_task(service.diagnose(0x01, 0x05, timeout=2))
+        for _ in range(5):
+            await asyncio.sleep(0)
+        busy = DiagnosticResponse(1, DiagnosticStatus.BUS_UNAVAILABLE)
+        stream.inbox.put_nowait(encode_message(to_frame_message(busy, 2)))
+        result = await task
+        self.assertEqual(result, {"status": "bus_unavailable", "data": None})
+        self.assertEqual(
+            (await service.diagnose(0x03, timeout=0.05))["status"], "link_timeout"
+        )
+        await service.stop()
+
+    async def test_refuses_without_connection_and_non_read_only(self) -> None:
+        from kenpi.core.errors import ProtocolError
+
+        stopped = VehicleLinkService(VehicleCoordinator(), lambda: FakeStream())
+        with self.assertRaises(ProtocolError):
+            await stopped.diagnose(0x01, 0x0C)
+        service, stream = await self._connected()
+        before = len(stream.written)
+        with self.assertRaises(ProtocolError):
+            await service.diagnose(0x04)
+        self.assertEqual(len(stream.written), before)
+        await service.stop()
