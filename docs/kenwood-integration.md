@@ -25,6 +25,7 @@ Official references identified for this exact model:
 - [Full reference manual](https://manuals.jvckenwood.com/download/files/B5K-1159_ref_K_En_20b.pdf)
 - [Instruction manual](https://manuals.jvckenwood.com/download/files/B5K-1159-20b.pdf)
 - [Android for Cars supported application models](https://developer.android.com/training/cars)
+- [2024 firmware update page (covers DMX5710S/DMX50S/DMX500S)](https://www.kenwood.com/cs/ce/mm/firmware/2024/2024d/eng.html)
 
 Direct retrieval of the manufacturer pages/manuals failed with DNS errors in
 this environment. These are research references, not a verified connector,
@@ -77,3 +78,42 @@ Pi-to-DMX5710S video or touch transport, so none change the status above.
   — a personal multi-room audio source-switcher project (Snapcast/Plexamp/
   Spotify) that happens to be named "Kenwood Sound" by its author; it has no
   connection to the Kenwood brand or any Kenwood hardware. **Not applicable**.
+
+## Official firmware update page (E2, directly confirms the DMX5710S)
+
+JVCKENWOOD's own firmware update page,
+`https://www.kenwood.com/cs/ce/mm/firmware/2024/2024d/eng.html`, could not be
+fetched directly in this environment (same DNS block noted above), but its
+content was provided by the user. It is recorded here as **E2** evidence
+(official vendor source, content transcribed rather than fetched by Kenpi
+tooling) because it directly names the DMX5710S, unlike every other lead in
+this document:
+
+- Confirms the **"2024MODEL"** firmware package (file `DMX5_04.zip`, listed
+  update history dated 2025-05-19 through 2026-04-21, each entry reading only
+  "Improved stability" or "Improved functions" with no technical detail)
+  applies to exactly three units: **DMX5710S, DMX50S, DMX500S**. This is the
+  first directly-sourced, official confirmation that the project's exact head
+  unit is still receiving firmware updates and that it shares a firmware
+  family with the DMX50S/DMX500S.
+- Confirms the update is distributed and applied via a **FAT32 USB memory
+  stick** inserted into the head unit, with the unit displaying for "more
+  than 5 minutes" during the flash — corroborating, from an official rather
+  than community source, the USB-mass-storage-based update/customization
+  path already noted as E1 evidence from
+  `ggerihun/Kenwood-DMX8020DABS-suzuki-boot-screen` above.
+- **Reinforces the project's own policy, this time with an explicit legal
+  basis**: the page's Software License Agreement states "Modification,
+  alteration, translation, merging, reverse compiling, or reverse engineering
+  of this software is prohibited," and that JVCKENWOOD is the sole owner of
+  all copyright and intellectual property in the firmware and its
+  accompanying documents. Kenpi will not reverse-engineer, extract, patch, or
+  redistribute DMX5710S firmware images for this reason, independent of the
+  project's own E0-E5 evidence policy. Any future Gate 3 work must rely only
+  on the head unit's documented, vendor-supported external interfaces (HDMI
+  input, USB media, Android Auto/CarPlay projection where applicable) rather
+  than firmware-level modification.
+- The changelog text itself ("Improved stability" / "Improved functions")
+  contains no information about video input modes, touch architecture, or any
+  other detail relevant to Kenpi's display/touch integration, so it does not
+  change the NOT VERIFIED status above.
