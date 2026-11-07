@@ -1,16 +1,16 @@
 package com.kenpi.companion
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -18,188 +18,186 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.kenpi.companion.network.GatewayCapability
-import com.kenpi.companion.ui.GatewayIntent
-import com.kenpi.companion.ui.GatewayStore
-import com.kenpi.companion.ui.GatewayUiState
-import com.kenpi.companion.ui.GatewayViewModel
-import com.kenpi.companion.ui.isSnapshotStale
-import kotlinx.coroutines.delay
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
+import com.kenpi.gateway.LiveState
+import com.kenpi.gateway.PairingProgress
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 class MainActivity : ComponentActivity() {
-    private val viewModel: GatewayViewModel by viewModels { GatewayViewModel.factory(this) }
+    private val model: AppModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            MaterialTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background,
-                ) {
-                    GatewayScreen(viewModel.store)
-                }
-            }
-        }
+        setContent { KenpiTheme { KenpiApp(model) } }
     }
 
-    override fun onStop() {
-        // Pause polling when the app is actually backgrounded, but not merely because the
-        // Activity is being torn down and recreated for a configuration change (e.g. rotation),
-        // in which case the GatewayViewModel (and its GatewayStore) survives unchanged.
-        if (!isChangingConfigurations) {
-            viewModel.store.accept(GatewayIntent.StopMonitoring)
-        }
-        super.onStop()
+    override fun onStart() { super.onStart(); model.foreground(true) }
+    override fun onStop() { super.onStop(); model.foreground(false) }
+}
+
+@Composable
+fun KenpiTheme(content: @Composable () -> Unit) {
+    val dark = isSystemInDarkTheme()
+    val context = LocalContext.current
+    val scheme = when {
+        Build.VERSION.SDK_INT >= 31 -> if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        dark -> darkColorScheme()
+        else -> lightColorScheme()
+    }
+    MaterialTheme(colorScheme = scheme, content = content)
+}
+
+private enum class Tab(val label: String) { Dashboard("Dashboard"), Camera("Camera"), Vehicle("Vehicle"), Health("Health"), More("More") }
+
+@Composable
+fun KenpiApp(model: AppModel) {
+    val ui by model.ui.collectAsState()
+    when (val screen = ui.screen) {
+        Screen.Unpaired -> PairingScreen(ui, model)
+        is Screen.Pairing -> WaitingScreen(screen, model)
+        Screen.Paired -> PairedScreen(model)
     }
 }
 
 @Composable
-private fun GatewayScreen(store: GatewayStore) {
-    val state by store.state.collectAsState()
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text(
-            text = "Kenpi Companion",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            text = "Read-only gateway status. Camera controls and WebSocket updates are not available.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        OutlinedTextField(
-            value = state.baseUrl,
-            onValueChange = { store.accept(GatewayIntent.UpdateBaseUrl(it)) },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Gateway HTTPS base URL") },
-            placeholder = { Text("https://gateway.example/") },
-            singleLine = true,
-            enabled = !state.isMonitoring,
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (state.isMonitoring) {
-                Button(
-                    onClick = { store.accept(GatewayIntent.StopMonitoring) },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Stop monitoring")
-                }
-            } else {
-                Button(
-                    onClick = { store.accept(GatewayIntent.StartMonitoring) },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Start monitoring")
-                }
-            }
-            TextButton(
-                onClick = { store.accept(GatewayIntent.Refresh) },
-                enabled = !state.isRefreshing,
-            ) {
-                Text("Refresh")
-            }
+private fun PairingScreen(ui: Ui, model: AppModel) {
+    var manual by rememberSaveable { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf(Build.MODEL ?: "Android") }
+    val scan = rememberLauncherForActivityResult(ScanContract()) { result ->
+        result.contents?.let { model.pairFromUri(it, name) }
+    }
+    Scaffold { pad ->
+        Column(Modifier.padding(pad).padding(20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Pair with a Kenpi gateway", style = MaterialTheme.typography.headlineSmall)
+            Text("On the Raspberry Pi run: kenpi-devices pair  -- then scan the QR code. An administrator must approve this device.")
+            ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            OutlinedTextField(name, { name = it }, label = { Text("Device name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Button(onClick = {
+                scan.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("Scan the Kenpi pairing QR").setBeepEnabled(false))
+            }, modifier = Modifier.fillMaxWidth()) { Text("Scan QR code") }
+            OutlinedTextField(manual, { manual = it }, label = { Text("or paste kenpi://pair?d=…") }, modifier = Modifier.fillMaxWidth())
+            OutlinedButton(onClick = { model.pairFromUri(manual, name) }, enabled = manual.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Pair") }
         }
+    }
+}
 
-        if (state.isRefreshing) {
+@Composable
+private fun WaitingScreen(screen: Screen.Pairing, model: AppModel) {
+    Scaffold { pad ->
+        Column(Modifier.padding(pad).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             CircularProgressIndicator()
-        }
-        state.error?.let { error ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(16.dp),
-                )
-            }
-        }
-        GatewayStatus(state)
-    }
-}
-
-@Composable
-private fun GatewayStatus(state: GatewayUiState) {
-    val snapshot = state.snapshot
-
-    // Ticks once a second so the staleness check below re-evaluates even when no new data
-    // arrives (e.g. the gateway stopped responding while polling keeps retrying in the
-    // background).
-    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(1_000)
-            nowMillis = System.currentTimeMillis()
-        }
-    }
-    val isStale = isSnapshotStale(nowMillis, state.lastUpdatedAtMillis)
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text("Gateway", style = MaterialTheme.typography.titleLarge)
-            Text(if (snapshot == null) "Status: Not connected" else "Status: ${snapshot.applicationStatus}")
-            Text(if (state.isMonitoring) "Monitoring: active (2 s polling)" else "Monitoring: stopped")
-            Text("Realtime updates: unavailable (HTTP polling)")
-            state.lastUpdated?.let { Text("Last updated: $it") }
-            if (isStale) {
-                Text(
-                    text = "⚠ Data may be stale: no successful refresh recently.",
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            snapshot?.healthDetails?.forEach { (label, value) ->
-                Text("$label: $value")
-            }
-        }
-    }
-
-    Spacer(modifier = Modifier.height(2.dp))
-    Text("Declared capabilities", style = MaterialTheme.typography.titleLarge)
-    if (snapshot == null || snapshot.capabilities.isEmpty()) {
-        Text("Capability data will appear after a successful refresh.")
-    } else {
-        snapshot.capabilities.forEach { capability ->
-            CapabilityCard(capability)
+            Text(
+                when (screen.progress) {
+                    PairingProgress.AwaitingApproval -> "Waiting for the administrator to approve this device (kenpi-devices approve)."
+                    else -> "Contacting gateway and verifying its certificate…"
+                },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            OutlinedButton(onClick = model::cancelPairing) { Text("Cancel") }
         }
     }
 }
 
 @Composable
-private fun CapabilityCard(capability: GatewayCapability) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(capability.name, style = MaterialTheme.typography.titleMedium)
-            Text("State: ${capability.state} · Evidence: ${capability.evidence}")
-            Text(capability.detail, style = MaterialTheme.typography.bodySmall)
+private fun PairedScreen(model: AppModel) {
+    var tab by rememberSaveable { mutableStateOf(Tab.Dashboard) }
+    val live by model.live.collectAsState()
+    val ui by model.ui.collectAsState()
+    Scaffold(bottomBar = {
+        NavigationBar {
+            Tab.values().forEach { t -> NavigationBarItem(selected = tab == t, onClick = { tab = t }, icon = {}, label = { Text(t.label) }) }
+        }
+    }) { pad ->
+        Column(Modifier.padding(pad).padding(16.dp).fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ConnectionBanner(live)
+            val state = (live as? LiveState.Live)?.snapshot?.state ?: (live as? LiveState.Disconnected)?.lastKnown?.state
+            when (tab) {
+                Tab.Dashboard -> {
+                    Section("Gateway", listOf("Address" to (ui.gateway ?: "-"), "Device" to (ui.deviceId ?: "-")))
+                    (live as? LiveState.Live)?.let { Section("Stream", listOf("Last sequence" to it.lastSequence.toString(), "Resumed" to it.resumed.toString())) }
+                }
+                Tab.Camera -> Scope("Camera", state?.get("camera"), "Live preview, media browsing and recording control are unavailable: the A810 Lite protocol is not verified.")
+                Tab.Vehicle -> Scope("Vehicle", state?.get("vehicle"), null)
+                Tab.Health -> Scope("System health", state?.get("status"), null)
+                Tab.More -> More(model, ui, state?.get("media"))
+            }
         }
     }
+}
+
+@Composable
+private fun ConnectionBanner(live: LiveState) {
+    val (text, error) = when (live) {
+        LiveState.Idle -> "Not connected" to false
+        is LiveState.Connecting -> "Connecting (attempt ${live.attempt})…" to false
+        is LiveState.Live -> (if (live.resumed) "Live, resumed" else "Live") to false
+        is LiveState.Disconnected -> "Disconnected: ${live.reason}. Showing last known data. Retrying." to true
+        is LiveState.RemoteDenied -> "Remote access is disabled for this device." to true
+        LiveState.Revoked -> "Device revoked" to true
+    }
+    Card { Text(text, Modifier.padding(12.dp), color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) }
+}
+
+@Composable
+private fun Section(title: String, rows: List<Pair<String, String>>) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            if (rows.isEmpty()) Text("No data")
+            rows.forEach { (k, v) -> Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) { Text(k); Text(v) } }
+        }
+    }
+}
+
+private fun flatten(value: kotlinx.serialization.json.JsonElement?, prefix: String = ""): List<Pair<String, String>> = when (value) {
+    null -> emptyList()
+    is JsonObject -> value.flatMap { (k, v) -> flatten(v, if (prefix.isEmpty()) k else "$prefix.$k") }
+    is JsonPrimitive -> listOf(prefix to value.content)
+    else -> listOf(prefix to value.toString())
+}
+
+@Composable
+private fun Scope(title: String, data: kotlinx.serialization.json.JsonElement?, unavailable: String?) {
+    if (data == null) Section(title, listOf("State" to "Not provided by the gateway (scope not granted or not connected)"))
+    else Section(title, flatten(data))
+    unavailable?.let { Card { Text(it, Modifier.padding(12.dp)) } }
+}
+
+@Composable
+private fun More(model: AppModel, ui: Ui, media: kotlinx.serialization.json.JsonElement?) {
+    Scope("Media", media, "Browsing, download and playback are unavailable until the camera protocol is verified.")
+    val wg = ui.wireGuard
+    Section(
+        "Remote connectivity (WireGuard)",
+        if (wg == null) listOf("State" to (ui.wireGuardNote ?: "Checking…"))
+        else listOf("Tunnel address" to wg.address, "Gateway" to wg.gatewayAddress, "Port" to wg.listenPort.toString()),
+    )
+    Section("This device", listOf("Device ID" to (ui.deviceId ?: "-"), "Key" to "Android Keystore, P-256, non-exportable"))
+    Section("Diagnostics", ui.log.takeLast(15).map { "•" to it })
+    OutlinedButton(onClick = model::reconnect, modifier = Modifier.fillMaxWidth()) { Text("Reconnect now") }
+    OutlinedButton(onClick = model::unpair, modifier = Modifier.fillMaxWidth()) { Text("Forget this gateway on this device") }
+    Text("Forgetting is local only. Ask the administrator to revoke the device on the gateway.", style = MaterialTheme.typography.bodySmall)
 }

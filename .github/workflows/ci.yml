@@ -75,9 +75,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - name: Run Android unit tests
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install gateway for interop tests
+        run: python -m pip install . cryptography
+      - name: Run Android and core tests (core talks to the real Python gateway)
         working-directory: android
-        run: ./gradlew testDebugUnitTest --stacktrace
+        env:
+          KENPI_INTEROP_PYTHON: python
+          KENPI_INTEROP_ROOT: ${{ github.workspace }}
+        run: ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --stacktrace
 
   live-integration:
     runs-on: ubuntu-latest
