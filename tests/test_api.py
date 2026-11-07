@@ -137,13 +137,19 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(
                 "script-src 'self'", dashboard.headers["Content-Security-Policy"]
             )
-            self.assertIn(b"Loading current service capabilities", dashboard.read())
+            dashboard_body = dashboard.read()
+            self.assertIn(b"Loading current service capabilities", dashboard_body)
+            for screen in (b"main", b"camera", b"media", b"system", b"vehicle"):
+                self.assertIn(b'data-screen="' + screen + b'"', dashboard_body)
+                self.assertIn(b'data-target="' + screen + b'"', dashboard_body)
             stylesheet = await asyncio.to_thread(
                 urlopen, f"{base_url}/static/dashboard.css"
             )
             self.assertIn(b"color-scheme", stylesheet.read())
             script = await asyncio.to_thread(urlopen, f"{base_url}/static/dashboard.js")
-            self.assertIn(b"/api/v1/capabilities", script.read())
+            script_body = script.read()
+            self.assertIn(b"/api/v1/capabilities", script_body)
+            self.assertIn(b"renderVehicleScreen", script_body)
 
             with self.assertRaises(HTTPError) as error:
                 await asyncio.to_thread(urlopen, f"{base_url}/missing")
