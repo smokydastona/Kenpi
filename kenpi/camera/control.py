@@ -53,9 +53,14 @@ class CameraControlService:
                 timeout=self._timeout,
             )
         except (TimeoutError, asyncio.TimeoutError):
-            return OperationResult(request_created=True, error="camera request timed out")
+            return OperationResult(
+                request_created=True, error="camera request timed out"
+            )
         except Exception as exc:
-            return OperationResult(request_created=True, error=f"camera transport failed: {type(exc).__name__}")
+            return OperationResult(
+                request_created=True,
+                error=f"camera transport failed: {type(exc).__name__}",
+            )
 
         try:
             decoded = self._codec.decode_response(response.payload)

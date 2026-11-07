@@ -11,7 +11,9 @@ from kenpi.vehicle.protocol import (
 
 class VehicleProtocolTests(unittest.TestCase):
     def test_round_trip_across_partial_uart_reads(self) -> None:
-        expected = VehicleMessage(message_type=2, sequence=65535, payload=b"ignition:on")
+        expected = VehicleMessage(
+            message_type=2, sequence=65535, payload=b"ignition:on"
+        )
         encoded = encode_message(expected)
         decoder = VehicleMessageDecoder()
         self.assertEqual(decoder.feed(encoded[:5]), ())

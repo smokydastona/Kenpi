@@ -18,7 +18,9 @@ class TestAdapter:
     async def close(self) -> None:
         return None
 
-    async def request(self, payload: bytes, timeout_seconds: float) -> TransportResponse:
+    async def request(
+        self, payload: bytes, timeout_seconds: float
+    ) -> TransportResponse:
         self.calls += 1
         return TransportResponse(payload, 0.0)
 
@@ -41,7 +43,9 @@ class CameraControlTests(unittest.IsolatedAsyncioTestCase):
         self.adapter = TestAdapter()
         definitions = (
             CommandDefinition("status", CommandSafety.READ_ONLY, EvidenceLevel.E0),
-            CommandDefinition("setting", CommandSafety.REVERSIBLE_WRITE, EvidenceLevel.E0),
+            CommandDefinition(
+                "setting", CommandSafety.REVERSIBLE_WRITE, EvidenceLevel.E0
+            ),
         )
         self.service = CameraControlService(
             self.adapter, TestCodec(), CommandRegistry(definitions)

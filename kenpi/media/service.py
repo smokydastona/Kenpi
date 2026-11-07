@@ -16,7 +16,9 @@ class MediaEntry:
 class CameraMediaProvider(Protocol):
     async def list_files(self, timeout_seconds: float) -> tuple[MediaEntry, ...]: ...
 
-    async def download(self, camera_id: str, destination: str, timeout_seconds: float) -> None: ...
+    async def download(
+        self, camera_id: str, destination: str, timeout_seconds: float
+    ) -> None: ...
 
 
 class PlaybackService(Protocol):

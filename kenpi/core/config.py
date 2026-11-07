@@ -24,7 +24,9 @@ class KenpiConfig:
         if not isinstance(self.environment, str):
             raise ConfigurationError("environment must be a string")
         if self.environment not in {"production", "development", "test"}:
-            raise ConfigurationError("environment must be production, development, or test")
+            raise ConfigurationError(
+                "environment must be production, development, or test"
+            )
         if not isinstance(self.api_host, str):
             raise ConfigurationError("api_host must be an IP address")
         try:
@@ -38,11 +40,25 @@ class KenpiConfig:
             or not isinstance(self.camera_request_timeout_seconds, (int, float))
             or not 0.1 <= self.camera_request_timeout_seconds <= 60
         ):
-            raise ConfigurationError("camera request timeout must be between 0.1 and 60 seconds")
-        if type(self.camera_enabled) is not bool or type(self.vehicle_uart_enabled) is not bool:
+            raise ConfigurationError(
+                "camera request timeout must be between 0.1 and 60 seconds"
+            )
+        if (
+            type(self.camera_enabled) is not bool
+            or type(self.vehicle_uart_enabled) is not bool
+        ):
             raise ConfigurationError("feature flags must be booleans")
-        if self.environment == "production" and self.api_host not in {"127.0.0.1", "::1"}:
-            raise ConfigurationError("production API must bind to loopback until authentication is configured")
+        if self.camera_enabled or self.vehicle_uart_enabled:
+            raise ConfigurationError(
+                "camera and vehicle transports are not implemented"
+            )
+        if self.environment == "production" and self.api_host not in {
+            "127.0.0.1",
+            "::1",
+        }:
+            raise ConfigurationError(
+                "production API must bind to loopback until authentication is configured"
+            )
 
 
 def load_config(path: str | Path) -> KenpiConfig:
@@ -56,13 +72,20 @@ def load_config(path: str | Path) -> KenpiConfig:
 
     if not isinstance(data, dict):
         raise ConfigurationError("configuration root must be a table")
+    unknown_sections = set(data) - {"kenpi"}
+    if unknown_sections:
+        raise ConfigurationError(
+            f"unknown configuration sections: {', '.join(sorted(unknown_sections))}"
+        )
     root = data.get("kenpi", {})
     if not isinstance(root, dict):
         raise ConfigurationError("[kenpi] must be a table")
     allowed = set(KenpiConfig.__dataclass_fields__)
     unknown = set(root) - allowed
     if unknown:
-        raise ConfigurationError(f"unknown configuration keys: {', '.join(sorted(unknown))}")
+        raise ConfigurationError(
+            f"unknown configuration keys: {', '.join(sorted(unknown))}"
+        )
     try:
         return KenpiConfig(**root)
     except TypeError as exc:

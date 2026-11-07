@@ -23,14 +23,32 @@ class ConfigurationTests(unittest.TestCase):
             with self.assertRaises(ConfigurationError):
                 load_config(path)
 
+    def test_rejects_unknown_configuration_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "kenpi.toml"
+            path.write_text("[camera]\nenabled = true\n", encoding="utf-8")
+            with self.assertRaises(ConfigurationError):
+                load_config(path)
+
+    def test_rejects_unimplemented_hardware_transports(self) -> None:
+        with self.assertRaises(ConfigurationError):
+            KenpiConfig(camera_enabled=True)
+        with self.assertRaises(ConfigurationError):
+            KenpiConfig(vehicle_uart_enabled=True)
+
     def test_initial_device_capabilities_are_not_claimed_available(self) -> None:
         self.assertTrue(
-            all(item.state is not CapabilityState.AVAILABLE for item in INITIAL_CAPABILITIES)
+            all(
+                item.state is not CapabilityState.AVAILABLE
+                for item in INITIAL_CAPABILITIES
+            )
         )
 
     def test_available_capability_requires_reproduced_evidence(self) -> None:
         with self.assertRaises(ValueError):
-            Capability("camera", CapabilityState.AVAILABLE, EvidenceLevel.E3, "not reproduced")
+            Capability(
+                "camera", CapabilityState.AVAILABLE, EvidenceLevel.E3, "not reproduced"
+            )
 
 
 class OperationResultTests(unittest.TestCase):
@@ -39,7 +57,9 @@ class OperationResultTests(unittest.TestCase):
             OperationResult(request_created=True, response_received=True)
 
     def test_does_not_infer_acknowledgement_or_verification(self) -> None:
-        result = OperationResult(request_created=True, transmitted=True, response_received=True)
+        result = OperationResult(
+            request_created=True, transmitted=True, response_received=True
+        )
         self.assertFalse(result.acknowledged)
         self.assertIsNone(result.state_verified)
 

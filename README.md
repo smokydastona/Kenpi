@@ -3,8 +3,9 @@
 **Turning the Kenwood touchscreen into the command centre for the 70mai A810 Lite.**
 
 Kenpi is a Raspberry Pi gateway project. This repository currently contains a
-Python service foundation, safety policies, and host-independent tests; it does
-not yet control or display an A810 Lite.
+Python service foundation, a loopback-only status API/dashboard, safety
+policies, and host-independent tests; it does not yet control or display an
+A810 Lite.
 
 ## Safety and verification status
 
@@ -21,6 +22,9 @@ not yet control or display an A810 Lite.
 Requires Python 3.11 or newer. Run host-only checks with:
 
 ```sh
+python -m pip install -e '.[dev]'
+ruff format --check kenpi tests
+ruff check kenpi tests
 python -m compileall -q kenpi tests
 python -m unittest discover -v
 ```
@@ -28,6 +32,10 @@ python -m unittest discover -v
 The TOML example in `config/kenpi.example.toml` binds locally and leaves
 hardware services disabled. Production configuration rejects a non-loopback API
 bind until API authentication is implemented.
+
+Run the local status dashboard with `kenpi --config config/kenpi.example.toml`.
+The dashboard reports live capability declarations and host health only; it has
+no camera-control or recording endpoints.
 
 ## Architecture and blockers
 
