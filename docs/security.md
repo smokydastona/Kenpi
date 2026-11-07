@@ -41,3 +41,9 @@ at 4 KB (64 KB for `/api/v1/assistant/*`). Assistant routes are rate limited to 
 per device (429). `tests/test_gateway_adversarial.py` covers malformed HTTP and WebSocket frames,
 forged/expired/replayed credentials, revocation closing live sockets, scope enforcement on every
 assistant route, path tricks, and the absence of any phone approval route.
+
+## Backups and enrolled voices
+
+Backups never include `reference.wav` or `speaker.pth` (enrolled voice material), in addition to
+the existing key/credential exclusions, and restore never writes them. After a restore, re-enroll
+custom voices with consent. Conversation history (`conversations.json`, redacted) is included.
