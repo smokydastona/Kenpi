@@ -12,7 +12,7 @@ import json
 import logging
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any, Sequence
 from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,12 @@ class ChatCompletionsProvider:
         except (OSError, ValueError, urllib.error.URLError) as error:
             return False, type(error).__name__
 
-    def propose(self, text: str, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def propose(
+        self,
+        text: str,
+        tools: list[dict[str, Any]],
+        history: Sequence[tuple[str, str]] = (),
+    ) -> list[dict[str, Any]]:
         catalog = [
             {k: t.get(k) for k in ("name", "description", "args") if k in t}
             for t in tools
@@ -100,6 +105,11 @@ class ChatCompletionsProvider:
                     "role": "system",
                     "content": _SYSTEM + " Tools: " + json.dumps(catalog),
                 },
+                *(
+                    {"role": role, "content": turn[:MAX_INPUT_CHARS]}
+                    for role, turn in history[-6:]
+                    if role in ("user", "assistant")
+                ),
                 {"role": "user", "content": text[:MAX_INPUT_CHARS]},
             ],
         }

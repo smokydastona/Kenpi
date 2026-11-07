@@ -2,6 +2,7 @@ import asyncio
 import json
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import ProxyHandler, build_opener
@@ -136,7 +137,7 @@ class OrchestratorTests(unittest.TestCase):
         )
 
         class Provider:
-            def propose(self, text, tools):
+            def propose(self, text, tools, history=()):
                 return [
                     {"tool": "rm_rf"},
                     {"tool": "ping", "args": {"n": "x"}},
@@ -161,7 +162,16 @@ class OrchestratorTests(unittest.TestCase):
 
 class DiagnosticsTests(unittest.TestCase):
     def test_healthy_host_has_no_faults_and_camera_unverified(self) -> None:
-        report = make_assistant().diagnostics.run()
+        healthy = {
+            "load_1m": 0.1,
+            "cpu_count": 4,
+            "swap_total_bytes": 0,
+            "swap_used_bytes": 0,
+            "throttled_flags": 0,
+            "usb_devices": [],
+        }
+        with unittest.mock.patch("kenpi.assistant.collect_system", lambda: healthy):
+            report = make_assistant().diagnostics.run()
         self.assertEqual(report.fault_ids() - {"voice.no_engine"}, set())
         self.assertEqual(report.subsystem_status["host"], "ok")
         self.assertEqual(report.subsystem_status["camera"], "unknown")

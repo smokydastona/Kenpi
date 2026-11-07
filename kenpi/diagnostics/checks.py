@@ -297,6 +297,85 @@ def check_voice(context: DiagnosticContext) -> list[CheckResult]:
     return results
 
 
+def check_system(context: DiagnosticContext) -> list[CheckResult]:
+    from kenpi.diagnostics.system import THROTTLE_BITS
+
+    if context.system is None:
+        return [_unknown(Subsystem.HOST, "system", "system telemetry not configured")]
+    data = context.system()
+    results: list[CheckResult] = []
+    load, cpus = data.get("load_1m"), data.get("cpu_count")
+    if load is None or not cpus:
+        results.append(_unknown(Subsystem.HOST, "cpu_load", "load average unavailable"))
+    else:
+        per_core = load / cpus
+        status = Status.WARN if per_core >= 1.5 else Status.OK
+        results.append(
+            CheckResult(
+                Subsystem.HOST,
+                "cpu_load",
+                status,
+                f"1-minute load is {load:.2f} on {cpus} cores",
+                {"per_core": round(per_core, 2)},
+            )
+        )
+    total, used = data.get("swap_total_bytes"), data.get("swap_used_bytes")
+    if total is None or used is None:
+        results.append(_unknown(Subsystem.HOST, "swap", "swap reading unavailable"))
+    elif total == 0:
+        results.append(
+            CheckResult(Subsystem.HOST, "swap", Status.OK, "no swap configured")
+        )
+    else:
+        ratio = used / total
+        results.append(
+            CheckResult(
+                Subsystem.HOST,
+                "swap",
+                Status.WARN if ratio > 0.5 else Status.OK,
+                f"{ratio:.0%} of swap is in use",
+                {"used_ratio": round(ratio, 3)},
+            )
+        )
+    flags = data.get("throttled_flags")
+    if flags is None:
+        results.append(
+            _unknown(
+                Subsystem.HOST, "throttling", "firmware throttle flags unavailable"
+            )
+        )
+    else:
+        active = [t for b, t in THROTTLE_BITS.items() if flags & (1 << b)]
+        now = flags & 0xF
+        status = (
+            Status.FAIL if flags & 1 else Status.WARN if (now or flags) else Status.OK
+        )
+        results.append(
+            CheckResult(
+                Subsystem.HOST,
+                "throttling",
+                status,
+                "; ".join(active)
+                if active
+                else "no throttling or under-voltage recorded",
+                {"flags": hex(flags)},
+            )
+        )
+    usb = data.get("usb_devices")
+    results.append(
+        _unknown(Subsystem.HOST, "usb", "USB bus not readable")
+        if usb is None
+        else CheckResult(
+            Subsystem.HOST,
+            "usb",
+            Status.OK,
+            f"{len(usb)} USB device(s) enumerated",
+            {"devices": usb},
+        )
+    )
+    return results
+
+
 def check_companion(context: DiagnosticContext) -> list[CheckResult]:
     if context.companion is None:
         return [
@@ -356,6 +435,7 @@ def default_registry() -> CheckRegistry:
         ("services", check_services),
         ("voice", check_voice),
         ("companion", check_companion),
+        ("system", check_system),
     ):
         registry.register(name, check)
     return registry

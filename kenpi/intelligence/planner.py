@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol, Sequence
 
 from kenpi.intelligence.tools import ToolRegistry
 from kenpi.voice.characters import resolve_character
@@ -38,7 +38,10 @@ class PlanProvider(Protocol):
     """Optional model-backed planner. Its output is untrusted and always validated."""
 
     def propose(
-        self, text: str, tools: list[dict[str, Any]]
+        self,
+        text: str,
+        tools: list[dict[str, Any]],
+        history: Sequence[tuple[str, str]] = (),
     ) -> list[dict[str, Any]]: ...
 
 
@@ -106,7 +109,12 @@ class Planner:
         self._registry = registry
         self._provider = provider
 
-    def plan(self, text: str, pending: dict[str, Any] | None = None) -> Plan:
+    def plan(
+        self,
+        text: str,
+        pending: dict[str, Any] | None = None,
+        history: Sequence[tuple[str, str]] = (),
+    ) -> Plan:
         text = text.strip()
         if not text:
             return Plan((), 0.0, "I did not catch anything.")
@@ -119,7 +127,7 @@ class Planner:
                 return self._build(tool, text)
         if self._provider is not None:
             steps = self._validated(
-                self._provider.propose(text, self._registry.describe())
+                self._provider.propose(text, self._registry.describe(), history)
             )
             if steps:
                 return Plan(tuple(steps), 0.5)

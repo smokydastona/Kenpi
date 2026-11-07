@@ -17,12 +17,13 @@ from typing import Any, Callable
 from kenpi.companion import CompanionRegistry, redact
 from kenpi.core.events import EventBus, EventType
 from kenpi.core.permissions import Permission
+from kenpi.diagnostics.system import collect_system
 from kenpi.diagnostics.ingest import JournalUnavailable, LogStore, read_journal
 from kenpi.diagnostics.engine import DiagnosticsEngine
 from kenpi.diagnostics.history import DiagnosticHistory
 from kenpi.diagnostics.models import DiagnosticContext, Status
 from kenpi.diagnostics.remediation import RemediationAction, RemediationRegistry
-from kenpi.intelligence.memory import PreferenceMemory, SessionStore
+from kenpi.intelligence.memory import ConversationStore, PreferenceMemory, SessionStore
 from kenpi.intelligence.orchestrator import Orchestrator
 from kenpi.intelligence.provider import ChatCompletionsProvider
 from kenpi.intelligence.planner import Planner
@@ -168,6 +169,7 @@ class AssistantService:
             capabilities=evidence,
             voice_status=self.voice.status,
             companion=self.companion.evidence,
+            system=collect_system,
             log_lines=self._observed_logs,
         )
         remediation = RemediationRegistry()
@@ -197,6 +199,9 @@ class AssistantService:
             SessionStore(),
             events,
             character=self.character_voice,
+            conversations=ConversationStore(
+                data_dir / "conversations.json" if data_dir else None
+            ),
         )
         self._voices: dict[str, CharacterVoice] = {}
 
@@ -508,6 +513,7 @@ class AssistantService:
 
         def clear_preferences(_: dict[str, Any]) -> dict[str, Any]:
             self.memory.clear()
+            self.orchestrator.conversations.delete()
             return {"message": "I have forgotten your preferences."}
 
         def describe_capabilities(_: dict[str, Any]) -> dict[str, Any]:

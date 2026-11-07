@@ -37,6 +37,18 @@ def detect_faults(results: list[CheckResult], logs: LogAnalysis | None) -> list[
         "The Raspberry Pi is running hot",
     )
     from_check(
+        Subsystem.HOST,
+        "throttling",
+        "host.power_throttled",
+        "The Raspberry Pi reports under-voltage or throttling",
+    )
+    from_check(
+        Subsystem.HOST,
+        "cpu_load",
+        "host.cpu_overload",
+        "The Raspberry Pi CPU is overloaded",
+    )
+    from_check(
         Subsystem.NETWORK, "interfaces", "network.no_link", "No network link is up"
     )
     from_check(

@@ -149,6 +149,29 @@ _ISSUES = (
         ("timeout", "network"),
     ),
     KnownIssue(
+        "host.power_throttled",
+        "Power or thermal throttling",
+        "The firmware flagged under-voltage, frequency capping or throttling. This is a firmware report, not a guess.",
+        (
+            Step(
+                "Use the official 5 V / 5 A supply and a short, thick cable; check the vehicle 12 V converter under load."
+            ),
+            Step("Improve cooling if the temperature check is also high."),
+        ),
+        ("power", "voltage", "throttl", "slow", "lightning"),
+    ),
+    KnownIssue(
+        "host.cpu_overload",
+        "CPU overloaded",
+        "The one-minute load average is at least 1.5 per core.",
+        (
+            Step(
+                "Check which service is busy (top / journalctl) and whether inference is running on the Pi."
+            ),
+        ),
+        ("slow", "cpu", "load", "lag"),
+    ),
+    KnownIssue(
         "companion.disconnected",
         "Phone cannot reach Kenpi",
         "A paired phone reported a connection problem and has no live session with the gateway.",

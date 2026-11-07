@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from kenpi.core.events import EventBus, EventType
 from kenpi.intelligence.approvals import ApprovalStore, PendingApproval
-from kenpi.intelligence.memory import SessionStore
+from kenpi.intelligence.memory import ConversationStore, SessionStore
 from kenpi.intelligence.planner import Plan, Planner
 from kenpi.intelligence.tools import PolicyEngine, ToolRegistry
 from kenpi.voice.characters import CharacterVoice
@@ -58,7 +58,9 @@ class Orchestrator:
         events: EventBus | None = None,
         character: Callable[[], CharacterVoice] | None = None,
         approvals: ApprovalStore | None = None,
+        conversations: ConversationStore | None = None,
     ) -> None:
+        self.conversations = conversations or ConversationStore()
         self.approvals = approvals or ApprovalStore()
         self._character = character
         self._registry = registry
@@ -74,7 +76,9 @@ class Orchestrator:
         approved: bool = False,
         user_initiated: bool = True,
     ) -> Response:
-        plan = self._planner.plan(text, self._sessions.pending(session_id))
+        history = self.conversations.recent(session_id)
+        plan = self._planner.plan(text, self._sessions.pending(session_id), history)
+        self.conversations.add(session_id, "user", text)
         self._sessions.set_pending(session_id, plan.pending)
         if plan.clarification:
             kind = (
@@ -84,7 +88,9 @@ class Orchestrator:
             )
             if plan.clarification.startswith("I did not catch"):
                 kind = None
-            return self._finish(Response(self._style(kind, plan.clarification), plan))
+            return self._finish(
+                Response(self._style(kind, plan.clarification), plan), session_id
+            )
         outcomes = tuple(
             self._execute(step.tool, step.args, approved, user_initiated, session_id)
             for step in plan.steps
@@ -97,7 +103,8 @@ class Orchestrator:
             or "Nothing to do."
         )
         return self._finish(
-            Response(self._style(self._tone(outcomes), message), plan, outcomes)
+            Response(self._style(self._tone(outcomes), message), plan, outcomes),
+            session_id,
         )
 
     @staticmethod
@@ -171,7 +178,8 @@ class Orchestrator:
             return f"I need your approval to {outcome.tool.replace('_', ' ')}."
         return f"I can't do that: {outcome.reason}."
 
-    def _finish(self, response: Response) -> Response:
+    def _finish(self, response: Response, session_id: str = "default") -> Response:
+        self.conversations.add(session_id, "assistant", response.message)
         if self._events is not None:
             self._events.publish(
                 EventType.ASSISTANT_REQUEST,
