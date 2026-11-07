@@ -41,6 +41,7 @@ jobs:
             deploy/install-status.sh \
             deploy/rollback-status.sh \
             os-image/build.sh \
+            os-image/stage-kenpi/prerun.sh \
             os-image/stage-kenpi/00-install-kenpi/01-run.sh \
             os-image/stage-kenpi/00-install-kenpi/02-run-chroot.sh
 
