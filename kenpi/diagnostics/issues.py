@@ -172,6 +172,24 @@ _ISSUES = (
         ("slow", "cpu", "load", "lag"),
     ),
     KnownIssue(
+        "network.cert_expiring",
+        "Gateway certificate expiring",
+        "The gateway certificate is expired or has under 30 days left. Re-issuing it changes the pinned fingerprint, so phones must re-pair.",
+        (
+            Step(
+                "Plan a re-issue of the gateway certificate and re-pair the phone afterwards."
+            ),
+        ),
+        ("certificate", "tls", "expired"),
+    ),
+    KnownIssue(
+        "network.no_route",
+        "No default route",
+        "The routing table has no default route, so nothing outside the local link is reachable.",
+        (Step("Check the uplink (Ethernet/Wi-Fi) and DHCP lease."),),
+        ("route", "internet", "gateway"),
+    ),
+    KnownIssue(
         "companion.disconnected",
         "Phone cannot reach Kenpi",
         "A paired phone reported a connection problem and has no live session with the gateway.",

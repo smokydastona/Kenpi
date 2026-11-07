@@ -140,6 +140,69 @@ def check_network(context: DiagnosticContext) -> list[CheckResult]:
     return [CheckResult(Subsystem.NETWORK, "interfaces", status, detail, {"up": up})]
 
 
+def check_network_routes(context: DiagnosticContext) -> list[CheckResult]:
+    net = Subsystem.NETWORK
+    if context.network is None:
+        return [_unknown(net, "routing", "network telemetry not configured")]
+    data = context.network()
+    out: list[CheckResult] = []
+    route = data.get("has_default_route")
+    if route is None:
+        out.append(_unknown(net, "routing", "routing table unreadable"))
+    elif route:
+        out.append(
+            CheckResult(
+                net,
+                "routing",
+                Status.OK,
+                f"default route via {data.get('default_gateway')}",
+            )
+        )
+    else:
+        out.append(CheckResult(net, "routing", Status.WARN, "no default route"))
+    dns = data.get("dns_servers")
+    if dns is None:
+        out.append(_unknown(net, "dns_config", "resolver configuration unreadable"))
+    else:
+        out.append(
+            CheckResult(
+                net,
+                "dns_config",
+                Status.OK if dns else Status.WARN,
+                f"{len(dns)} resolver(s) configured"
+                if dns
+                else "no resolver configured",
+            )
+        )
+    wg = data.get("wireguard_interfaces")
+    out.append(
+        _unknown(net, "wireguard", "interfaces unreadable")
+        if wg is None
+        else CheckResult(
+            net,
+            "wireguard",
+            Status.OK if wg else Status.UNKNOWN,
+            f"WireGuard interface(s): {', '.join(wg)}"
+            if wg
+            else "no WireGuard interface present",
+        )
+    )
+    days = data.get("cert_days_left")
+    if days is None:
+        out.append(_unknown(net, "tls_certificate", "gateway certificate unreadable"))
+    else:
+        status = Status.FAIL if days <= 0 else Status.WARN if days < 30 else Status.OK
+        out.append(
+            CheckResult(
+                net,
+                "tls_certificate",
+                status,
+                f"gateway certificate valid for {days:.0f} more day(s)",
+            )
+        )
+    return out
+
+
 def check_vehicle(context: DiagnosticContext) -> list[CheckResult]:
     if context.vehicle is None:
         return [
@@ -436,6 +499,7 @@ def default_registry() -> CheckRegistry:
         ("voice", check_voice),
         ("companion", check_companion),
         ("system", check_system),
+        ("network_routes", check_network_routes),
     ):
         registry.register(name, check)
     return registry

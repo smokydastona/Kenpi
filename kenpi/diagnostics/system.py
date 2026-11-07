@@ -91,3 +91,63 @@ def collect_system(
     except OSError:
         pass
     return result
+
+
+def collect_network(
+    proc_root: Path = Path("/proc"),
+    sys_root: Path = Path("/sys"),
+    resolv_conf: Path = Path("/etc/resolv.conf"),
+    cert_path: Path | None = None,
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Routing, resolver, WireGuard interface and gateway certificate evidence (None = unknown)."""
+    import time
+
+    result: dict[str, Any] = {
+        "default_gateway": None,
+        "has_default_route": None,
+        "dns_servers": None,
+        "wireguard_interfaces": None,
+        "cert_days_left": None,
+    }
+    routes = _read(proc_root / "net/route")
+    if routes is not None:
+        result["has_default_route"] = False
+        for line in routes.splitlines()[1:]:
+            fields = line.split()
+            if len(fields) > 2 and fields[1] == "00000000":
+                try:
+                    raw = bytes.fromhex(fields[2])[::-1]
+                except ValueError:
+                    continue
+                result["has_default_route"] = True
+                result["default_gateway"] = ".".join(str(b) for b in raw)
+                break
+    resolv = _read(resolv_conf)
+    if resolv is not None:
+        result["dns_servers"] = [
+            line.split()[1]
+            for line in resolv.splitlines()
+            if line.startswith("nameserver") and len(line.split()) > 1
+        ]
+    try:
+        names = [p.name for p in (sys_root / "class/net").iterdir()]
+        result["wireguard_interfaces"] = sorted(
+            n
+            for n in names
+            if (sys_root / "class/net" / n / "uevent").is_file()
+            and "DEVTYPE=wireguard"
+            in (_read(sys_root / "class/net" / n / "uevent") or "")
+        )
+    except OSError:
+        pass
+    if cert_path is not None:
+        try:
+            from cryptography import x509
+
+            cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+            expires = cert.not_valid_after_utc.timestamp()
+            result["cert_days_left"] = (expires - (now or time.time())) / 86400
+        except (OSError, ValueError, ImportError):
+            pass
+    return result

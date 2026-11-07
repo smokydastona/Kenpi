@@ -17,7 +17,7 @@ from typing import Any, Callable
 from kenpi.companion import CompanionRegistry, redact
 from kenpi.core.events import EventBus, EventType
 from kenpi.core.permissions import Permission
-from kenpi.diagnostics.system import collect_system
+from kenpi.diagnostics.system import collect_network, collect_system
 from kenpi.diagnostics.ingest import JournalUnavailable, LogStore, read_journal
 from kenpi.diagnostics.engine import DiagnosticsEngine
 from kenpi.diagnostics.history import DiagnosticHistory
@@ -170,6 +170,11 @@ class AssistantService:
             voice_status=self.voice.status,
             companion=self.companion.evidence,
             system=collect_system,
+            network=lambda: collect_network(
+                cert_path=data_dir.parent / "gateway" / "gateway.pem"
+                if data_dir
+                else None
+            ),
             log_lines=self._observed_logs,
         )
         remediation = RemediationRegistry()

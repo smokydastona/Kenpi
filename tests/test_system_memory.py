@@ -78,3 +78,57 @@ class ConversationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NetworkTests(unittest.TestCase):
+    def test_collects_route_dns_wireguard_and_cert(self) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.x509.oid import NameOID
+
+        from kenpi.diagnostics.checks import check_network_routes
+        from kenpi.diagnostics.system import collect_network
+
+        key = ec.generate_private_key(ec.SECP256R1())
+        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "t")])
+        start = datetime.now(timezone.utc)
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(name)
+            .issuer_name(name)
+            .public_key(key.public_key())
+            .serial_number(1)
+            .not_valid_before(start - timedelta(days=1))
+            .not_valid_after(start + timedelta(days=10))
+            .sign(key, hashes.SHA256())
+        )
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "net").mkdir()
+            (root / "net/route").write_text(
+                "Iface\tDestination\tGateway\neth0\t00000000\t0100A8C0\n"
+            )
+            (root / "resolv.conf").write_text("nameserver 192.168.0.1\n")
+            wg = root / "sys/class/net/wg0"
+            wg.mkdir(parents=True)
+            (wg / "uevent").write_text("DEVTYPE=wireguard\n")
+            pem = root / "gw.pem"
+            pem.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+            data = collect_network(root, root / "sys", root / "resolv.conf", pem)
+            missing = collect_network(root / "x", root / "x", root / "x", None)
+        self.assertEqual(data["default_gateway"], "192.168.0.1")
+        self.assertEqual(data["dns_servers"], ["192.168.0.1"])
+        self.assertEqual(data["wireguard_interfaces"], ["wg0"])
+        self.assertAlmostEqual(data["cert_days_left"], 10, delta=0.1)
+        ctx = DiagnosticContext(host_health=lambda: {}, network=lambda: data)
+        out = {r.name: r for r in check_network_routes(ctx)}
+        self.assertEqual(out["tls_certificate"].status, Status.WARN)
+        self.assertEqual(out["routing"].status, Status.OK)
+        self.assertIsNone(missing["has_default_route"])
+        ctx = DiagnosticContext(host_health=lambda: {}, network=lambda: missing)
+        self.assertTrue(
+            all(r.status == Status.UNKNOWN for r in check_network_routes(ctx))
+        )

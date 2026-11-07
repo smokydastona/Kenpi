@@ -55,6 +55,7 @@ class DiagnosticContext:
     voice_status: Callable[[], dict[str, Any]] | None = None
     companion: Callable[[], dict[str, Any]] | None = None
     system: Callable[[], dict[str, Any]] | None = None
+    network: Callable[[], dict[str, Any]] | None = None
     log_lines: Callable[[], list[str]] | None = None
     clock: Callable[[], float] = time.time
 

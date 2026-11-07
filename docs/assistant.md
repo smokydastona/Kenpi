@@ -246,3 +246,11 @@ failed outcome instead of blocking the assistant. An optional `verify` callback 
 and a failed check is reported as a failure, not success. `Orchestrator.history` keeps the last 200
 executions (tool, argument names only, outcome, duration) in memory. A timed-out thread cannot be
 force-killed in Python; it is a daemon thread and its result is discarded.
+
+## Host and network evidence
+
+Checks read `/proc`, `/sys`, `/etc/resolv.conf`, the firmware throttle flags and the gateway
+certificate: CPU load, swap, throttling/under-voltage, USB devices, default route, configured
+resolvers, WireGuard interfaces and certificate days remaining. Unreadable sources report
+`unknown`. Not yet covered: live DNS resolution, DHCP lease state, WireGuard peer handshakes,
+filesystem errors and storage health.

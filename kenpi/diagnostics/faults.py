@@ -49,6 +49,15 @@ def detect_faults(results: list[CheckResult], logs: LogAnalysis | None) -> list[
         "The Raspberry Pi CPU is overloaded",
     )
     from_check(
+        Subsystem.NETWORK,
+        "tls_certificate",
+        "network.cert_expiring",
+        "The gateway TLS certificate is expired or expiring",
+    )
+    from_check(
+        Subsystem.NETWORK, "routing", "network.no_route", "No default network route"
+    )
+    from_check(
         Subsystem.NETWORK, "interfaces", "network.no_link", "No network link is up"
     )
     from_check(
