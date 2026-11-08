@@ -111,8 +111,52 @@ def _inside(root: Path, ref: str) -> bool:
     return target.is_file() and root.resolve() in target.parents
 
 
+STATUS_DOC = ROOT / "docs" / "implementation-status.md"
+BEGIN, END = "<!-- register:begin -->", "<!-- register:end -->"
+
+
+def render_table(entries: list[dict]) -> str:
+    rows = [
+        "| Capability | Implementation | Hardware | Evidence | Missing |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for e in entries:
+        rows.append(
+            f"| {e['id']} | {e['implementation']} | {'yes' if e['hardware'] else 'no'} "
+            f"| {e['evidence']} | {e.get('missing', '').strip() or '-'} |"
+        )
+    return "\n".join(rows)
+
+
+def status_doc_problems(entries: list[dict], doc: Path = STATUS_DOC) -> list[str]:
+    """The generated block in the status doc must equal the register; edit the TOML, not the doc."""
+    text = doc.read_text(encoding="utf-8") if doc.is_file() else ""
+    if BEGIN not in text or END not in text:
+        return [f"{doc.name}: missing register block markers"]
+    block = text.split(BEGIN, 1)[1].split(END, 1)[0].strip()
+    if block != render_table(entries):
+        return [
+            f"{doc.name}: register block is stale; run `python -m kenpi.tools.register --write-status`"
+        ]
+    return []
+
+
+def write_status(entries: list[dict], doc: Path = STATUS_DOC) -> None:
+    text = doc.read_text(encoding="utf-8")
+    head, rest = text.split(BEGIN, 1)
+    tail = rest.split(END, 1)[1]
+    doc.write_text(
+        f"{head}{BEGIN}\n{render_table(entries)}\n{END}{tail}", encoding="utf-8"
+    )
+
+
 def main() -> int:
-    found = problems(load())
+    entries = load()
+    if "--write-status" in sys.argv[1:]:
+        write_status(entries)
+    found = problems(entries)
+    if not found:
+        found = status_doc_problems(entries)
     for line in found:
         print(line, file=sys.stderr)
     print("register ok" if not found else f"{len(found)} problem(s)")
