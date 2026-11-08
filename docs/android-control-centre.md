@@ -44,3 +44,14 @@ That rule is not shipped. A refusal is shown to the user, not hidden.
 | Settings: permissions per device, automation | NOT BUILT; device scopes are chosen at pairing on the Pi |
 
 Nothing on this page is hardware-verified.
+
+## Update: power operations and polkit rule
+
+- `reboot` and `shutdown` are broker operations (scope `ops.manage`, confirmation token required,
+  no arguments). They run `systemctl reboot` / `systemctl poweroff`. Tested with a fake runner only;
+  never executed on a real Pi. The dashcam records independently of the Pi.
+- `deploy/50-kenpi-broker.rules` is a polkit rule that lets the `kenpi` user restart only the three
+  allowlisted units and reboot/power off. It uses D-Bus, so it works under `NoNewPrivileges`.
+  **Opt-in**: copy it to `/etc/polkit-1/rules.d/` yourself. The installer does not do it, and the
+  rule has not been tested against a real polkit daemon.
+- Still NOT BUILT: Pi Desktop, package/filesystem/config/network/GPIO operations, the premium UI.

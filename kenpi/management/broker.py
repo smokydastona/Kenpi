@@ -189,6 +189,13 @@ class Broker:
             code, out = self.runner(["systemctl", "restart", args["unit"]], 25.0)
             return {"unit": args["unit"], "ok": code == 0, "detail": out}
 
+        def power(verb: str) -> Callable[[dict[str, Any]], dict[str, Any]]:
+            def handler(_: dict[str, Any]) -> dict[str, Any]:
+                code, out = self.runner(["systemctl", verb], 10.0)
+                return {"ok": code == 0, "detail": out}
+
+            return handler
+
         def list_services(_: dict[str, Any]) -> dict[str, Any]:
             return {"units": sorted(self.allowed_units)}
 
@@ -229,6 +236,22 @@ class Broker:
                 service_restart,
                 self._unit_args,
                 26.0,
+            ),
+            Operation(
+                "reboot",
+                "Reboot the Pi (the dashcam keeps recording on its own)",
+                "ops.manage",
+                "confirm",
+                power("reboot"),
+                no_args,
+            ),
+            Operation(
+                "shutdown",
+                "Power off the Pi; it must be restarted by hand or by vehicle power",
+                "ops.manage",
+                "confirm",
+                power("poweroff"),
+                no_args,
             ),
         ):
             self._ops[op.id] = op

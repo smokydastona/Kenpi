@@ -52,7 +52,7 @@ class BrokerTests(unittest.TestCase):
     def test_unknown_operation_and_non_object_args(self):
         broker, _ = make()
         with self.assertRaises(BrokerError) as ctx:
-            broker.run("d", BOTH, "reboot", {})
+            broker.run("d", BOTH, "format_disk", {})
         self.assertEqual(ctx.exception.status, 404)
         with self.assertRaises(BrokerError):
             broker.run("d", BOTH, "list_services", [])
@@ -72,6 +72,33 @@ class BrokerTests(unittest.TestCase):
             runner.calls, [["systemctl", "restart", "kenpi-status.service"]]
         )
         self.assertIn("op_done", [a for a, _ in log])
+
+    def test_power_operations_need_confirmation(self):
+        for op, verb in (("reboot", "reboot"), ("shutdown", "poweroff")):
+            runner = FakeRunner()
+            broker, _ = make(runner)
+            with self.assertRaises(BrokerError):
+                broker.run("d", READ, op, {})
+            first = broker.run("d", BOTH, op, {})
+            self.assertEqual(first["status"], "confirmation_required")
+            self.assertEqual(runner.calls, [])
+            with self.assertRaises(BrokerError):
+                broker.run("d", BOTH, op, {"force": True})
+            broker.run("d", BOTH, op, {}, first["confirm_token"])
+            self.assertEqual(runner.calls, [["systemctl", verb]])
+
+    def test_polkit_rule_matches_wired_units(self):
+        root = Path(__file__).resolve().parents[1]
+        rule = (root / "deploy/50-kenpi-broker.rules").read_text()
+        main = (root / "kenpi/main.py").read_text()
+        for unit in (
+            "kenpi-status.service",
+            "kenpi-backup.service",
+            "kenpi-backup.timer",
+        ):
+            self.assertIn(f'"{unit}"', rule)
+            self.assertIn(f'"{unit}"', main)
+        self.assertIn('subject.user !== "kenpi"', rule)
 
     def test_token_is_single_use_and_bound(self):
         broker, _ = make()

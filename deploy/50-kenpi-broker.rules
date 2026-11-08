@@ -1,0 +1,19 @@
+// Lets the unprivileged kenpi account do exactly what the operation broker allows,
+// over D-Bus (this works under NoNewPrivileges, unlike sudo/pkexec).
+// Keep the unit list in step with kenpi/main.py; tests/test_broker.py checks it.
+polkit.addRule(function (action, subject) {
+    if (subject.user !== "kenpi") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var units = ["kenpi-status.service", "kenpi-backup.service", "kenpi-backup.timer"];
+    if (action.id === "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("verb") === "restart" &&
+        units.indexOf(action.lookup("unit")) !== -1) {
+        return polkit.Result.YES;
+    }
+    if (action.id === "org.freedesktop.login1.reboot" ||
+        action.id === "org.freedesktop.login1.power-off") {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});
