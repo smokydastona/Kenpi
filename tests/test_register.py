@@ -79,6 +79,28 @@ class RegisterTests(unittest.TestCase):
         found = register.problems([self.entry(id="camera_control", hardware=True)])
         self.assertTrue(any("not AVAILABLE" in p for p in found))
 
+    def test_complete_hardware_needs_e4(self):
+        found = register.problems(
+            [self.entry(id="camera_control", hardware=True, implementation="complete")]
+        )
+        self.assertTrue(any("needs E4+" in p for p in found))
+
+    def test_status_doc_matches_register(self):
+        self.assertEqual(register.status_doc_problems(register.load()), [])
+
+    def test_stale_status_doc_detected_and_rewritten(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as d:
+            doc = Path(d) / "s.md"
+            doc.write_text(f"x\n{register.BEGIN}\nold\n{register.END}\ny")
+            entries = register.load()
+            self.assertTrue(register.status_doc_problems(entries, doc))
+            register.write_status(entries, doc)
+            self.assertEqual(register.status_doc_problems(entries, doc), [])
+            self.assertTrue(doc.read_text().endswith("y"))
+
 
 if __name__ == "__main__":
     unittest.main()

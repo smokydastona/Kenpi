@@ -23,6 +23,7 @@ class ServiceCoordinator:
         self._services = services
         self._events = events
         self._started: list[ManagedService] = []
+        self._failures: dict[str, str] = {}
         self._lock = asyncio.Lock()
 
     def describe(self) -> dict[str, object]:
@@ -42,6 +43,9 @@ class ServiceCoordinator:
             "started_service_count": len(started),
             "started_services": [type(service).__name__ for service in started],
             "is_running": bool(started),
+            "startup_order": [type(service).__name__ for service in self._services],
+            "failures": dict(self._failures),
+            "all_started": len(started) == len(self._services) and not self._failures,
         }
 
     def _publish(self, kind: EventType, service: object, **data: object) -> None:
@@ -52,12 +56,14 @@ class ServiceCoordinator:
         async with self._lock:
             if self._started:
                 raise RuntimeError("services are already started")
+            self._failures = {}
             try:
                 for service in self._services:
                     self._started.append(service)
                     try:
                         await service.start()
                     except BaseException as exc:
+                        self._failures[type(service).__name__] = type(exc).__name__
                         self._publish(
                             EventType.SERVICE_FAILED, service, error=type(exc).__name__
                         )
@@ -94,6 +100,7 @@ class ServiceCoordinator:
                 task.result()
             except BaseException as exc:
                 failures.append(exc)
+                self._failures[type(service).__name__] = type(exc).__name__
                 self._publish(
                     EventType.SERVICE_FAILED, service, error=type(exc).__name__
                 )

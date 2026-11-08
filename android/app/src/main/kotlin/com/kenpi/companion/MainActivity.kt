@@ -1,7 +1,12 @@
 package com.kenpi.companion
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.speech.RecognizerIntent
+import android.speech.tts.TextToSpeech
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -14,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,12 +29,16 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,7 +80,7 @@ fun KenpiTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = scheme, content = content)
 }
 
-private enum class Tab(val label: String) { Dashboard("Dashboard"), Camera("Camera"), Vehicle("Vehicle"), Health("Health"), More("More") }
+private enum class Tab(val label: String) { Dashboard("Dashboard"), Camera("Camera"), Vehicle("Vehicle"), Health("Health"), Pi("Pi"), Assistant("Assistant"), More("More") }
 
 @Composable
 fun KenpiApp(model: AppModel) {
@@ -142,6 +152,8 @@ private fun PairedScreen(model: AppModel) {
                 Tab.Camera -> Scope("Camera", state?.get("camera"), "Live preview, media browsing and recording control are unavailable: the A810 Lite protocol is not verified.")
                 Tab.Vehicle -> Scope("Vehicle", state?.get("vehicle"), null)
                 Tab.Health -> Scope("System health", state?.get("status"), null)
+                Tab.Pi -> PiTab(model, ui)
+                Tab.Assistant -> AssistantTab(model, ui, live)
                 Tab.More -> More(model, ui, state?.get("media"))
             }
         }
@@ -196,8 +208,99 @@ private fun More(model: AppModel, ui: Ui, media: kotlinx.serialization.json.Json
         else listOf("Tunnel address" to wg.address, "Gateway" to wg.gatewayAddress, "Port" to wg.listenPort.toString()),
     )
     Section("This device", listOf("Device ID" to (ui.deviceId ?: "-"), "Key" to "Android Keystore, P-256, non-exportable"))
+    Section("Camera network probe", listOf("Read-only" to "Lists open TCP ports on the Wi-Fi gateway you are joined to (the camera's hotspot) and what they answer. Observations only; it does not control the camera.") + (ui.probeReport?.lines()?.filter { it.isNotBlank() }?.map { "•" to it } ?: emptyList()))
+    OutlinedButton(onClick = model::probeCamera, enabled = !ui.probeBusy, modifier = Modifier.fillMaxWidth()) { Text(if (ui.probeBusy) "Probing…" else "Probe camera network") }
     Section("Diagnostics", ui.log.takeLast(15).map { "•" to it })
     OutlinedButton(onClick = model::reconnect, modifier = Modifier.fillMaxWidth()) { Text("Reconnect now") }
     OutlinedButton(onClick = model::unpair, modifier = Modifier.fillMaxWidth()) { Text("Forget this gateway on this device") }
     Text("Forgetting is local only. Ask the administrator to revoke the device on the gateway.", style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
+private fun PiTab(model: AppModel, ui: Ui) {
+    LaunchedEffect(Unit) { model.refreshServices() }
+    Card(Modifier.fillMaxWidth()) {
+        Text(
+            "Service management uses a fixed list on the Pi. Restarting never touches the dashcam's own recording. Pi Desktop, files, packages, network and power controls are not available yet.",
+            Modifier.padding(12.dp),
+        )
+    }
+    ui.opsNote?.let { Card { Text(it, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.error) } }
+    if (ui.services.isEmpty()) Section("Services", listOf("State" to "No data"))
+    ui.services.forEach { (unit, state) ->
+        Section(unit, listOf("State" to state))
+        OutlinedButton(onClick = { model.requestRestart(unit) }, modifier = Modifier.fillMaxWidth()) { Text("Restart $unit") }
+    }
+    OutlinedButton(onClick = model::refreshServices, modifier = Modifier.fillMaxWidth()) { Text("Refresh") }
+    ui.pendingRestart?.let { pending ->
+        AlertDialog(
+            onDismissRequest = model::cancelRestart,
+            title = { Text("Restart ${pending.unit}?") },
+            text = { Text("The service will stop and start again. This is recorded in the Pi's audit log.") },
+            confirmButton = { TextButton(onClick = model::confirmRestart) { Text("Restart") } },
+            dismissButton = { TextButton(onClick = model::cancelRestart) { Text("Cancel") } },
+        )
+    }
+}
+
+@Composable
+private fun AssistantTab(model: AppModel, ui: Ui, live: LiveState) {
+    var text by rememberSaveable { mutableStateOf("") }
+    val reachable = com.kenpi.gateway.LocalHelper.assistantReachable(live)
+    val context = LocalContext.current
+    var speakReplies by rememberSaveable { mutableStateOf(false) }
+    var voiceNote by remember { mutableStateOf<String?>(null) }
+    var ttsReady by remember { mutableStateOf(false) }
+    val tts = remember {
+        var engine: TextToSpeech? = null
+        engine = TextToSpeech(context) { status -> ttsReady = status == TextToSpeech.SUCCESS }
+        engine
+    }
+    DisposableEffect(Unit) { onDispose { tts.shutdown() } }
+    LaunchedEffect(ui.chat.size, speakReplies, ttsReady) {
+        val last = ui.chat.lastOrNull()
+        if (speakReplies && ttsReady && last != null && last.first == "Kenpi") {
+            tts.speak(last.second, TextToSpeech.QUEUE_FLUSH, null, "kenpi-reply")
+        }
+    }
+    val recognize = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val heard = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (heard.isNullOrBlank()) voiceNote = "Nothing was heard." else { voiceNote = null; text = heard }
+    }
+    Card(Modifier.fillMaxWidth()) {
+        Text(
+            if (reachable) "Connected to Kenpi. Ask for setup help or troubleshooting. Actions are never run from the phone."
+            else com.kenpi.gateway.LocalHelper.explain(true, live),
+            Modifier.padding(12.dp),
+        )
+    }
+    ui.chat.forEach { (who, message) -> Section(who, listOf("" to message)) }
+    OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("Ask Kenpi") }, modifier = Modifier.fillMaxWidth())
+    Button(
+        onClick = { model.ask(text); text = "" },
+        enabled = reachable && !ui.assistantBusy && text.isNotBlank(),
+        modifier = Modifier.fillMaxWidth(),
+    ) { Text(if (ui.assistantBusy) "Thinking…" else "Send") }
+    OutlinedButton(
+        onClick = {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                .putExtra(RecognizerIntent.EXTRA_PROMPT, "Ask Kenpi")
+            try {
+                recognize.launch(intent)
+            } catch (e: ActivityNotFoundException) {
+                voiceNote = "This phone has no speech recognizer installed. Type your question instead."
+            }
+        },
+        enabled = reachable && !ui.assistantBusy,
+        modifier = Modifier.fillMaxWidth(),
+    ) { Text("Speak (fills the box; review, then Send)") }
+    voiceNote?.let { Text(it) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(if (ttsReady) "Read replies aloud" else "Read replies aloud (no text-to-speech engine)")
+        Switch(checked = speakReplies && ttsReady, onCheckedChange = { speakReplies = it }, enabled = ttsReady)
+    }
+    OutlinedButton(onClick = model::fetchKenpiLogs, enabled = reachable, modifier = Modifier.fillMaxWidth()) { Text("Fetch Kenpi logs") }
+    OutlinedButton(onClick = model::uploadLogs, enabled = reachable, modifier = Modifier.fillMaxWidth()) { Text("Send this phone's logs to Kenpi") }
+    if (ui.kenpiLogs.isNotEmpty()) Section("Kenpi logs", ui.kenpiLogs.takeLast(20).map { "•" to it })
 }

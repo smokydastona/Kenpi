@@ -50,5 +50,11 @@ chown -hR root:root "$release"
 chmod -R go-w "$release/venv"
 ln -sfn "releases/$commit" /opt/kenpi/current
 
+# Optional assistant: off by default. Users toggle it with `kenpi-features enable|disable assistant`.
+install -d -m 0755 /var/lib/kenpi
+ln -sfn /opt/kenpi/current/venv/bin/kenpi-features /usr/local/bin/kenpi-features
+ln -sfn /opt/kenpi/current/venv/bin/kenpi-assist /usr/local/bin/kenpi-assist
+ln -sfn /opt/kenpi/current/venv/bin/kenpi-models /usr/local/bin/kenpi-models
+
 systemd-analyze verify /etc/systemd/system/kenpi-status.service
 systemctl enable kenpi-status.service

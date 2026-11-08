@@ -340,6 +340,46 @@ function renderVehicleScreen(capabilities, vehicle) {
   status.replaceChildren(...cards);
 }
 
+// The assistant is an optional feature: when its API is disabled (404) the tab stays hidden.
+function renderAssistantScreen(characters, voice, report) {
+  const tab = document.querySelector("#tab-assistant");
+  tab.hidden = !characters;
+  if (!characters) {
+    if (activeScreen === "assistant") setScreen("main");
+    return;
+  }
+  const cards = (characters.characters || []).map((character) => {
+    const card = document.createElement("article");
+    card.className = "capability-card" + (character.id === characters.active ? " active-character" : "");
+    const title = document.createElement("h4");
+    title.textContent = character.name + (character.id === characters.active ? " (active)" : "");
+    const detail = document.createElement("p");
+    detail.textContent = `${character.accent}. ${(character.traits || []).join(", ")}.`;
+    const note = document.createElement("p");
+    note.className = "subtle";
+    note.textContent = character.id === characters.default ? "Default character" : "Optional character";
+    card.append(title, detail, note);
+    return card;
+  });
+  document.querySelector("#assistant-characters").replaceChildren(...cards);
+
+  const engines = voice && Array.isArray(voice.engines) ? voice.engines : [];
+  renderDl(
+    document.querySelector("#assistant-voice"),
+    [
+      ...engines.map((e) => [e.id, e.available ? "ready" : `unavailable: ${e.detail}`]),
+      ["Microphone", voice ? voice.microphone : null],
+      ["Transcription", voice ? voice.transcription : null],
+    ],
+  );
+  renderDl(
+    document.querySelector("#assistant-diagnostics"),
+    report && report.subsystems
+      ? Object.entries(report.subsystems).sort().map(([name, state]) => [name, state])
+      : [["Report", null]],
+  );
+}
+
 function setScreen(name) {
   const screens = document.querySelectorAll(".screen");
   const tabs = document.querySelectorAll(".tab");
@@ -406,15 +446,23 @@ async function refresh() {
         return null;
       }
     };
-    const [vehicle, media] = await Promise.all([
+    const [vehicle, media, characters] = await Promise.all([
       optional("/api/v1/vehicle"),
       optional("/api/v1/media"),
+      optional("/api/v1/voice/characters"),
     ]);
+    const [voice, report] = characters
+      ? await Promise.all([
+          optional("/api/v1/voice/status"),
+          optional("/api/v1/diagnostics/report"),
+        ])
+      : [null, null];
     renderMainScreen(capabilities, health, serviceStatus);
     renderCameraScreen(capabilities);
     renderMediaScreen(capabilities, media);
     renderSystemScreen(health, serviceStatus);
     renderVehicleScreen(capabilities, vehicle);
+    renderAssistantScreen(characters, voice, report);
     lastSuccessAt = Date.now();
     status.classList.remove("stale");
     status.textContent = `Status last received: ${new Date(lastSuccessAt).toLocaleTimeString()}.`;

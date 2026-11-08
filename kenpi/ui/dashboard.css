@@ -79,6 +79,7 @@ a { color: #9bd5ff; }
   font-weight: 700;
   border-top: 3px solid #9bd5ff;
 }
+.capability-card.active-character { border-color: #9bd5ff; border-width: 2px; }
 .tab:focus-visible { outline: 2px solid #9bd5ff; outline-offset: -2px; }
 
 @media (max-width: 480px) {

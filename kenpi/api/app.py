@@ -30,6 +30,13 @@ except importlib.metadata.PackageNotFoundError:
     _KENPI_VERSION = "unknown"
 
 
+_ASSISTANT_PREFIXES = (
+    "/api/v1/voice/",
+    "/api/v1/intelligence/",
+    "/api/v1/diagnostics/",
+)
+
+
 def disabled_state(
     capabilities: tuple[Capability, ...], name: str
 ) -> dict[str, object]:
@@ -92,6 +99,8 @@ class KenpiApiService:
         media_library: LocalMediaLibrary | None = None,
         safe_mode: bool = False,
         events: EventBus | None = None,
+        features_provider: Callable[[], dict[str, object]] | None = None,
+        assistant: object | None = None,
     ) -> None:
         try:
             address = ipaddress.ip_address(host)
@@ -111,6 +120,8 @@ class KenpiApiService:
         self._media_library = media_library
         self._safe_mode = safe_mode
         self._events = events
+        self._features_provider = features_provider
+        self._assistant = assistant
         self._server: ThreadingHTTPServer | None = None
         self._server_task: asyncio.Task[None] | None = None
 
@@ -131,6 +142,8 @@ class KenpiApiService:
         media_library = self._media_library
         safe_mode = self._safe_mode
         events = self._events
+        features_provider = self._features_provider
+        assistant = self._assistant
         limiter = _TokenBucket(rate_per_second=50.0, burst=100)
         started_at_monotonic = time.monotonic()
         started_at_iso = datetime.now(timezone.utc).isoformat()
@@ -267,6 +280,23 @@ class KenpiApiService:
                             self._send_json(200, events.events_after(after, limit))
                 elif self.path == "/api/v1/status":
                     self._send_json(200, build_status_payload())
+                elif path == "/api/v1/features":
+                    self._send_json(
+                        200,
+                        {"features": features_provider() if features_provider else {}},
+                    )
+                elif path.startswith(_ASSISTANT_PREFIXES):
+                    routed = None
+                    if assistant is not None:
+                        routed = assistant.route(
+                            path, parse_qs(self.path.partition("?")[2])
+                        )
+                    if assistant is None:
+                        self._send_json(404, {"error": "feature_disabled"})
+                    elif routed is None:
+                        self._send_json(404, {"error": "not_found"})
+                    else:
+                        self._send_json(routed[0], routed[1])
                 else:
                     self._send_json(404, {"error": "not_found"})
 

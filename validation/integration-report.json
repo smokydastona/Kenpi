@@ -1,0 +1,49 @@
+{
+  "commit": "16b2403c1e17672c3aec45a4d21f7bce9baa550e",
+  "entry_points": [
+    "kenpi.assistant_cli",
+    "kenpi.features",
+    "kenpi.main",
+    "kenpi.models_cli",
+    "kenpi.tools.backup",
+    "kenpi.tools.devices"
+  ],
+  "generated_at": "2026-11-08T02:35:00Z",
+  "justification_problems": {
+    "invalid": [],
+    "stale": [],
+    "unjustified": []
+  },
+  "module_count": 103,
+  "python": "3.12.3",
+  "reachable_count": 77,
+  "uncommitted_changes": true,
+  "unreachable_modules": [
+    "kenpi.camera",
+    "kenpi.camera.adapter",
+    "kenpi.camera.commands",
+    "kenpi.camera.control",
+    "kenpi.camera.lifecycle",
+    "kenpi.camera.session",
+    "kenpi.kenwood",
+    "kenpi.kenwood.adapter",
+    "kenpi.tools.audit",
+    "kenpi.tools.capture_summary",
+    "kenpi.tools.gps_log",
+    "kenpi.tools.profiler",
+    "kenpi.tools.redact",
+    "kenpi.tools.register",
+    "kenpi.tools.release",
+    "kenpi.tools.report",
+    "kenpi.tools.research_corpus",
+    "kenpi.tools.video_bench",
+    "kenpi.ui",
+    "kenpi.vehicle.kline_session",
+    "kenpi.video",
+    "kenpi.video.buffer",
+    "kenpi.video.pipeline",
+    "kenpi.voice.chatterbox_backend",
+    "kenpi.voice.openvoice_backend",
+    "kenpi.voice.pipeline_server"
+  ]
+}

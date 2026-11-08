@@ -12,16 +12,19 @@ from kenpi.api.app import KenpiApiService, capability_payload, disabled_state
 from kenpi.core.capabilities import INITIAL_CAPABILITIES
 from kenpi.core.config import load_config
 from kenpi.core.events import EventBus, EventType
+from kenpi.features import FeatureStore
 from kenpi.notify.notifier import Notifier
 from kenpi.core.safemode import DEFAULT_MARKER, safe_mode_requested
 from kenpi.media.library import LocalMediaLibrary
+from kenpi.management.broker import Broker
 from kenpi.services.coordinator import ServiceCoordinator
+from kenpi.services.health import collect_host_health
 from kenpi.vehicle.link import SerialPort, VehicleCoordinator, VehicleLinkService
 
 logger = logging.getLogger(__name__)
 
 
-def _build_gateway(config, events, library, link, get_coordinator):
+def _build_gateway(config, events, library, link, get_coordinator, assistant=None):
     """Authenticated gateway; imports are local so cryptography is only needed when enabled."""
     import ipaddress
     from pathlib import Path
@@ -91,7 +94,40 @@ def _build_gateway(config, events, library, link, get_coordinator):
         remote_networks=networks,
         remote_enabled=remote_state.enabled,
         wireguard_info=wireguard_info,
+        broker=Broker(
+            registry.audit,
+            frozenset(
+                {"kenpi-status.service", "kenpi-backup.service", "kenpi-backup.timer"}
+            ),
+        ),
+        assistant_handler=(
+            lambda device, method, path, body: assistant.phone_request(
+                device.device_id, device.name, method, path, body
+            )
+        )
+        if assistant is not None
+        else None,
     )
+
+
+def _build_assistant(config, events, library, link, coordinator_status):
+    """Optional feature; construction failure must never stop the core service."""
+    from kenpi.assistant import AssistantService
+
+    try:
+        return AssistantService(
+            Path(config.state_directory) / "assistant",
+            events,
+            collect_host_health,
+            INITIAL_CAPABILITIES,
+            coordinator=coordinator_status,
+            vehicle=(lambda: link.snapshot().describe()) if link else None,
+            diagnose=link.diagnose if link else None,
+            media_library=library,
+        )
+    except Exception:
+        logger.exception("Assistant failed to initialise; continuing without it")
+        return None
 
 
 async def _serve(config_path: Path, safe_mode: bool = False) -> None:
@@ -119,6 +155,12 @@ async def _serve(config_path: Path, safe_mode: bool = False) -> None:
         removed = library.recover_interrupted_transfers()
         if removed:
             logger.warning("Removed %d interrupted partial downloads", len(removed))
+    features = FeatureStore(Path(config.state_directory))
+    assistant = None
+    if features.is_enabled("assistant") and not safe_mode:
+        assistant = _build_assistant(
+            config, events, library, link, lambda: coordinator_ref[0].describe()
+        )
     service = KenpiApiService(
         config.api_host,
         config.api_port,
@@ -128,13 +170,18 @@ async def _serve(config_path: Path, safe_mode: bool = False) -> None:
         status_provider=lambda: coordinator_ref[0].describe(),
         media_library=library,
         vehicle_provider=(lambda: link.snapshot().describe()) if link else None,
+        features_provider=features.describe,
+        assistant=assistant,
     )
     services: list = [link] if link else []
     services.append(service)
     if config.gateway_enabled and not safe_mode:
-        services.append(
-            _build_gateway(config, events, library, link, lambda: coordinator_ref[0])
+        gateway = _build_gateway(
+            config, events, library, link, lambda: coordinator_ref[0], assistant
         )
+        if assistant is not None:
+            assistant.companion.set_presence(gateway.connected_devices)
+        services.append(gateway)
     # The link starts first so the API never reports a link that is not running.
     coordinator = ServiceCoordinator(tuple(services), events=events)
     notifier = Notifier(events, config.notify_ntfy_url, config.notify_webhook_url)
@@ -148,11 +195,16 @@ async def _serve(config_path: Path, safe_mode: bool = False) -> None:
             installed_signals.append(signum)
         await coordinator.start()
         notifier.start()
+        if assistant is not None:
+            await assistant.start()
+            logger.info("Optional assistant enabled")
         logger.info("Local status service started")
         await stopped.wait()
     finally:
         try:
             notifier.stop()
+            if assistant is not None:
+                await assistant.stop()
             await coordinator.stop()
             events.close()
             logger.info("Local status service stopped")

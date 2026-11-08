@@ -30,7 +30,17 @@ FORMAT_VERSION = 1
 MEDIA = "media"
 SECRET_SUFFIXES = (".key", ".pem", ".p12", ".pfx")
 SECRET_DIRS = frozenset({"gateway", "tls", "wireguard"})
-SECRET_NAMES = frozenset({"devices.json", "devices.lock", "secret.key", "remote.json"})
+# Enrolled voice material is personal data: never archive it; re-enroll after a restore.
+SECRET_NAMES = frozenset(
+    {
+        "devices.json",
+        "devices.lock",
+        "secret.key",
+        "remote.json",
+        "reference.wav",
+        "speaker.pth",
+    }
+)
 MAX_MEMBERS = 200_000
 
 

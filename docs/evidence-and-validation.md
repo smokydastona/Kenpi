@@ -108,3 +108,24 @@ firmware, and all three hardware gates remain unverified.
 ## Implementation register
 
 `validation/register.toml` lists every capability with implementation status, host test files and evidence level. `python -m kenpi.tools.register` (also run by the test suite) fails if a register entry disagrees with the runtime capabilities, references a missing test, omits what is missing for an incomplete capability, or claims E4+ without `evidence_ref`.
+
+## Generated reports
+
+`python -m kenpi.tools.report [--output validation] [--skip-tests]` validates the
+register, then writes `implementation-report.json`, `hardware-readiness.json`
+(every hardware capability is `not_validated` unless E4+ evidence with a
+`evidence_ref` is registered) and, unless skipped, `test-report.json` from a
+real unittest run (failures and skips are recorded as such). Each file carries
+the commit and whether the tree was dirty. The files are not committed; they
+are only meaningful for the commit that generated them. Integration and
+dependency-license reports are not generated yet.
+
+## Integration and dependency audits
+
+`python -m kenpi.tools.audit [--output validation] [--strict]` writes
+`integration-report.json` (Python modules no entry point can import, i.e. implemented
+but disconnected) and `dependency-licences.json` (installed Python runtime dependency
+licences from package metadata; Android and firmware dependencies are listed with
+verdict `unknown` because they are not audited). Licence data is evidence for review,
+not legal clearance; `--strict` exits 1 on copyleft Python dependencies. Generated JSON
+is not committed.

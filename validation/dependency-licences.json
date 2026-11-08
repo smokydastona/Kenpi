@@ -1,0 +1,112 @@
+{
+  "android_and_firmware_declared": [
+    {
+      "dependency": "com.journeyapps:zxing-android-embedded:4.3.0",
+      "source": "android/app/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "androidx.activity:activity-compose:1.10.1",
+      "source": "android/app/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "androidx.activity:activity-ktx:1.10.1",
+      "source": "android/app/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "androidx.compose.material3:material3",
+      "source": "android/app/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "androidx.compose.ui:ui",
+      "source": "android/app/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "androidx.compose.ui:ui-tooling-preview",
+      "source": "android/app/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7",
+      "source": "android/app/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "androidx.security:security-crypto:1.1.0-alpha06",
+      "source": "android/app/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2",
+      "source": "android/app/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "junit:junit:4.13.2",
+      "source": "android/app/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "com.squareup.okhttp3:okhttp:4.12.0",
+      "source": "android/core/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2",
+      "source": "android/core/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3",
+      "source": "android/core/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "junit:junit:4.13.2",
+      "source": "android/core/build.gradle.kts",
+      "verdict": "unknown"
+    },
+    {
+      "dependency": "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2",
+      "source": "android/core/build.gradle.kts",
+      "verdict": "unknown"
+    }
+  ],
+  "commit": "16b2403c1e17672c3aec45a4d21f7bce9baa550e",
+  "generated_at": "2026-11-08T02:35:00Z",
+  "needs_review": [
+    "typing-extensions"
+  ],
+  "note": "Android and firmware licences are not audited here; verdict is unknown.",
+  "python": [
+    {
+      "license": "MIT-0",
+      "name": "cffi",
+      "verdict": "permissive",
+      "version": "2.1.1"
+    },
+    {
+      "license": "Apache-2.0 OR BSD-3-Clause",
+      "name": "cryptography",
+      "verdict": "permissive",
+      "version": "50.0.2"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "name": "pycparser",
+      "verdict": "permissive",
+      "version": "3.12"
+    },
+    {
+      "license": "not installed",
+      "name": "typing-extensions",
+      "verdict": "unknown",
+      "version": null
+    }
+  ],
+  "uncommitted_changes": true
+}

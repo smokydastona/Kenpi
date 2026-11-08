@@ -20,6 +20,25 @@ class RecordingService:
 
 
 class CoordinatorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_describe_reports_order_and_all_started(self) -> None:
+        events: list[str] = []
+        coordinator = ServiceCoordinator((RecordingService("a", events),))
+        self.assertFalse(coordinator.describe()["all_started"])
+        await coordinator.start()
+        info = coordinator.describe()
+        self.assertTrue(info["all_started"])
+        self.assertEqual(info["startup_order"], ["RecordingService"])
+        await coordinator.stop()
+        self.assertFalse(coordinator.describe()["is_running"])
+
+    async def test_describe_records_start_failure(self) -> None:
+        coordinator = ServiceCoordinator((RecordingService("a", [], fail_start=True),))
+        with self.assertRaises(RuntimeError):
+            await coordinator.start()
+        info = coordinator.describe()
+        self.assertEqual(info["failures"], {"RecordingService": "RuntimeError"})
+        self.assertFalse(info["all_started"])
+
     async def test_start_failure_stops_started_services_in_reverse_order(self) -> None:
         events: list[str] = []
         coordinator = ServiceCoordinator(

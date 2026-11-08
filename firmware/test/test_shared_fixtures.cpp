@@ -48,6 +48,17 @@ kenpi::VehicleMessage Typed(const std::string& name, std::uint16_t sequence) {
     return kenpi::MakePowerState(sequence, kenpi::PowerState::kFault, false);
   }
   if (name == "shutdown_request") return kenpi::MakeShutdownRequest(sequence, 30);
+  if (name == "diag_request") {
+    kenpi::VehicleMessage m;
+    m.message_type = static_cast<std::uint8_t>(kenpi::MessageType::kDiagRequest);
+    m.sequence = sequence;
+    m.payload = {0x00, 0x07, 0x01, 0x0C};
+    return m;
+  }
+  if (name == "diag_response") {
+    return kenpi::MakeDiagnosticResponse(sequence, 7, kenpi::DiagnosticStatus::kOk,
+                                         {0x41, 0x0C, 0x1A, 0xF8});
+  }
   return kenpi::MakeShutdownAck(sequence);
 }
 
@@ -84,7 +95,26 @@ int main(int argc, char** argv) {
       CHECK(decoded[0].payload == FromHex(fields[3]));
     }
   }
-  CHECK(cases == 5);
+  CHECK(cases == 7);
+
+  std::uint16_t id = 0;
+  std::uint8_t service = 0, pid = 0;
+  bool has_pid = false;
+  kenpi::VehicleMessage req;
+  req.message_type = static_cast<std::uint8_t>(kenpi::MessageType::kDiagRequest);
+  req.payload = {0x00, 0x07, 0x01, 0x0C};
+  CHECK(kenpi::ParseDiagnosticRequest(req, &id, &service, &has_pid, &pid));
+  CHECK(id == 7 && service == 1 && has_pid && pid == 0x0C);
+  req.payload = {0x00, 0x07, 0x03};
+  CHECK(kenpi::ParseDiagnosticRequest(req, &id, &service, &has_pid, &pid) && !has_pid);
+  for (std::uint8_t bad : {0x04, 0x08, 0x10, 0x27, 0x2E, 0x31, 0x34, 0x3B}) {
+    req.payload = {0x00, 0x07, bad, 0x00};
+    CHECK(!kenpi::ParseDiagnosticRequest(req, &id, &service, &has_pid, &pid));
+  }
+  req.payload = {0x00, 0x07, 0x01};
+  CHECK(!kenpi::ParseDiagnosticRequest(req, &id, &service, &has_pid, &pid));
+  req.payload = {0x00, 0x07, 0x03, 0x00};
+  CHECK(!kenpi::ParseDiagnosticRequest(req, &id, &service, &has_pid, &pid));
 
   kenpi::VehicleMessage bad = kenpi::MakePowerState(1, kenpi::PowerState::kRunning, true);
   bad.payload[0] = 10;

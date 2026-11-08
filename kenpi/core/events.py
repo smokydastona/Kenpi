@@ -30,6 +30,8 @@ class EventType(str, Enum):
     CONTROLLER_CONNECTED = "vehicle.controller_connected"
     CONTROLLER_DISCONNECTED = "vehicle.controller_disconnected"
     POWER_STATE_CHANGED = "vehicle.power_state_changed"
+    ASSISTANT_REQUEST = "assistant.request_handled"
+    ASSISTANT_DIAGNOSTICS = "assistant.diagnostics_run"
 
 
 @dataclass(frozen=True, slots=True)

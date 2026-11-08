@@ -19,7 +19,11 @@ from typing import Awaitable, Callable, Protocol
 
 from kenpi.core.errors import ProtocolError
 from kenpi.core.events import EventBus, EventType
+from kenpi.vehicle.kline import Response, decode_pid
 from kenpi.vehicle.messages import (
+    DiagnosticRequest,
+    DiagnosticResponse,
+    DiagnosticStatus,
     Heartbeat,
     PowerState,
     PowerStateReport,
@@ -101,6 +105,11 @@ class VehicleCoordinator:
         self._shutdown_acknowledged = False
         self._rejected = 0
         self._replayed = 0
+        self._diag_responses: list[DiagnosticResponse] = []
+
+    def take_diagnostic_responses(self) -> list[DiagnosticResponse]:
+        taken, self._diag_responses = self._diag_responses, []
+        return taken
 
     def ingest(self, chunk: bytes) -> tuple[ShutdownRequest, ...]:
         """Process serial bytes; returns shutdown requests needing a decision."""
@@ -124,6 +133,8 @@ class VehicleCoordinator:
                 self._shutdown_grace = message.grace_seconds
                 self._shutdown_acknowledged = False
                 requests.append(message)
+            elif isinstance(message, DiagnosticResponse):
+                self._diag_responses.append(message)
         return tuple(requests)
 
     def mark_acknowledged(self) -> None:
@@ -169,9 +180,43 @@ class VehicleLinkService:
         self._stream: ByteStream | None = None
         self._task: asyncio.Task[None] | None = None
         self._tx_sequence = 0
+        self._diag_lock = asyncio.Lock()
+        self._diag_pending: tuple[int, asyncio.Future[DiagnosticResponse]] | None = None
+        self._diag_next_id = 0
 
     def snapshot(self) -> VehicleSnapshot:
         return self._coordinator.snapshot()
+
+    async def diagnose(
+        self, service: int, pid: int | None = None, timeout: float = 3.0
+    ) -> dict[str, object]:
+        """Ask the controller to relay one read-only OBD-II request.
+
+        One request is in flight at a time. The result is evidence reported by
+        the controller; a timeout or unavailable bus is an error, never a value.
+        """
+        stream = self._stream
+        if (
+            stream is None
+            or self._coordinator.snapshot().link_state is not LinkState.CONNECTED
+        ):
+            raise ProtocolError("vehicle controller link is not connected")
+        async with self._diag_lock:
+            self._diag_next_id = (self._diag_next_id + 1) & 0xFFFF
+            request = DiagnosticRequest(self._diag_next_id, service, pid)
+            future: asyncio.Future[DiagnosticResponse] = (
+                asyncio.get_running_loop().create_future()
+            )
+            self._diag_pending = (request.request_id, future)
+            self._tx_sequence = (self._tx_sequence + 1) & 0xFFFF
+            stream.write(encode_message(to_frame_message(request, self._tx_sequence)))
+            try:
+                response = await asyncio.wait_for(future, timeout)
+            except asyncio.TimeoutError:
+                return {"status": "link_timeout", "data": None}
+            finally:
+                self._diag_pending = None
+        return _diagnostic_result(response)
 
     async def start(self) -> None:
         if self._task is not None:
@@ -206,6 +251,14 @@ class VehicleLinkService:
                     self._publish(EventType.CONTROLLER_DISCONNECTED)
                 return
             requests = self._coordinator.ingest(chunk)
+            for answer in self._coordinator.take_diagnostic_responses():
+                pending = self._diag_pending
+                if (
+                    pending
+                    and pending[0] == answer.request_id
+                    and not pending[1].done()
+                ):
+                    pending[1].set_result(answer)
             snapshot = self._coordinator.snapshot()
             if not connected and snapshot.link_state is LinkState.CONNECTED:
                 connected = True
@@ -233,6 +286,21 @@ class VehicleLinkService:
         self._tx_sequence = (self._tx_sequence + 1) & 0xFFFF
         stream.write(encode_message(to_frame_message(ShutdownAck(), self._tx_sequence)))
         self._coordinator.mark_acknowledged()
+
+
+def _diagnostic_result(response: DiagnosticResponse) -> dict[str, object]:
+    result: dict[str, object] = {"status": response.status.name.lower()}
+    if response.status is DiagnosticStatus.OK:
+        result["data"] = response.data.hex()
+        try:
+            name, value, unit = decode_pid(Response(0, response.data))
+        except ProtocolError:
+            pass
+        else:
+            result["decoded"] = {"name": name, "value": value, "unit": unit}
+    else:
+        result["data"] = response.data.hex() or None
+    return result
 
 
 _BAUDS = {

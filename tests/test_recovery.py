@@ -467,5 +467,14 @@ class SftpTests(unittest.TestCase):
             self.make().get("../../etc/passwd", Path("/tmp/x"))
 
 
+class VoiceAssetProtectionTests(unittest.TestCase):
+    def test_enrolled_voice_material_is_protected(self) -> None:
+        for name in ("reference.wav", "speaker.pth"):
+            self.assertTrue(
+                is_protected(("assistant", "voice", "brooklyn_gentleman", name))
+            )
+        self.assertFalse(is_protected(("assistant", "preferences.json")))
+
+
 if __name__ == "__main__":
     unittest.main()

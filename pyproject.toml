@@ -15,6 +15,9 @@ readme = "README.md"
 kenpi = "kenpi.main:main"
 kenpi-devices = "kenpi.tools.devices:main"
 kenpi-backup = "kenpi.tools.backup:main"
+kenpi-features = "kenpi.features:main"
+kenpi-assist = "kenpi.assistant_cli:main"
+kenpi-models = "kenpi.models_cli:main"
 
 [project.optional-dependencies]
 dev = ["ruff==0.11.2"]
