@@ -16,6 +16,7 @@ from kenpi.features import FeatureStore
 from kenpi.notify.notifier import Notifier
 from kenpi.core.safemode import DEFAULT_MARKER, safe_mode_requested
 from kenpi.media.library import LocalMediaLibrary
+from kenpi.management.broker import Broker
 from kenpi.services.coordinator import ServiceCoordinator
 from kenpi.services.health import collect_host_health
 from kenpi.vehicle.link import SerialPort, VehicleCoordinator, VehicleLinkService
@@ -93,6 +94,12 @@ def _build_gateway(config, events, library, link, get_coordinator, assistant=Non
         remote_networks=networks,
         remote_enabled=remote_state.enabled,
         wireguard_info=wireguard_info,
+        broker=Broker(
+            registry.audit,
+            frozenset(
+                {"kenpi-status.service", "kenpi-backup.service", "kenpi-backup.timer"}
+            ),
+        ),
         assistant_handler=(
             lambda device, method, path, body: assistant.phone_request(
                 device.device_id, device.name, method, path, body

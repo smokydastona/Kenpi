@@ -18,6 +18,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 from kenpi.core.events import Event, EventBus
+from kenpi.management.broker import Broker, BrokerError
 from kenpi.gateway.websocket import (
     OP_CLOSE,
     OP_PING,
@@ -108,8 +109,10 @@ class GatewayServer:
         rebind_seconds: float = 5.0,
         assistant_handler: Callable[[Device, str, str, dict], tuple[int, dict]]
         | None = None,
+        broker: Broker | None = None,
     ) -> None:
         self._assistant_handler = assistant_handler
+        self._broker = broker
         self._live: dict[int, tuple[str, str, float]] = {}
         for host in hosts:
             validate_bind_host(host)
@@ -133,6 +136,7 @@ class GatewayServer:
         self._auth_limiter = RateLimiter(10, 60.0)
         self._pair_limiter = RateLimiter(30, 60.0)
         self._assistant_limiter = RateLimiter(30, 60.0)
+        self._ops_limiter = RateLimiter(20, 60.0)
         self.bound_ports: list[int] = []
         self._wireguard_info, self._rebind_seconds = wireguard_info, rebind_seconds
         self._unbound: list[str] = []
@@ -348,13 +352,43 @@ class GatewayServer:
             return await asyncio.to_thread(
                 self._assistant_handler, device, method, path, body
             )
+        if path in {"/api/v1/ops", "/api/v1/ops/run"}:
+            return await self._ops(method, path, headers, body, zone)
         if method == "GET" and path == "/api/v1/wireguard":
             device = self._authenticated(headers, zone)
             info = self._wireguard_info(device)
             if info is None:
                 return 404, {"error": "not_found"}
             return 200, {"wireguard": info}
-        return (405 if path in {"/pair/enroll", "/pair/status", "/auth/refresh", "/api/v1/snapshot", "/api/v1/wireguard"} else 404), {"error": "not_found"}  # fmt: skip
+        return (405 if path in {"/pair/enroll", "/pair/status", "/auth/refresh", "/api/v1/snapshot", "/api/v1/wireguard", "/api/v1/ops", "/api/v1/ops/run"} else 404), {"error": "not_found"}  # fmt: skip
+
+    async def _ops(self, method, path, headers, body, zone) -> tuple[int, dict]:
+        device = self._authenticated(headers, zone)
+        if self._broker is None:
+            return 404, {"error": "feature_disabled"}
+        if path == "/api/v1/ops":
+            if method != "GET":
+                return 405, {"error": "not_found"}
+            return 200, {"operations": self._broker.operations(device.scopes)}
+        if method != "POST":
+            return 405, {"error": "not_found"}
+        if not self._ops_limiter.allow(device.device_id):
+            raise AuthError("rate_limited")
+        op, confirm = body.get("operation"), body.get("confirm_token")
+        if not isinstance(op, str) or not (confirm is None or isinstance(confirm, str)):
+            return 400, {"error": "bad_arguments"}
+        try:
+            result = await asyncio.to_thread(
+                self._broker.run,
+                device.device_id,
+                device.scopes,
+                op,
+                body.get("args", {}),
+                confirm,
+            )
+        except BrokerError as exc:
+            return exc.status, {"error": exc.code}
+        return 200, result
 
     def _authenticated(self, headers: dict, zone: str) -> Device:
         scheme, _, token = headers.get("authorization", "").partition(" ")

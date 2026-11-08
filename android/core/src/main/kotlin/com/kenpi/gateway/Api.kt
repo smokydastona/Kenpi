@@ -43,6 +43,26 @@ data class WireGuardParameters(
 data class Snapshot(val streamId: String, val sequence: Long, val state: JsonObject)
 
 /** REST client for the authenticated gateway. All bodies are size-bounded and strictly shaped. */
+sealed interface OperationReply {
+    data class ConfirmationRequired(val token: String, val expiresInSeconds: Int) : OperationReply
+    data class Done(val ok: Boolean, val result: JsonObject) : OperationReply
+
+    companion object {
+        fun parse(body: JsonObject): OperationReply = when ((body["status"] as? JsonPrimitive)?.content) {
+            "confirmation_required" -> ConfirmationRequired(
+                (body["confirm_token"] as? JsonPrimitive)?.content ?: throw GatewayException(0, "bad_reply"),
+                (body["expires_in"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0,
+            )
+            "done" -> {
+                val result = body["result"] as? JsonObject ?: throw GatewayException(0, "bad_reply")
+                // A missing "ok" is not success: report only what the Pi said.
+                Done((result["ok"] as? JsonPrimitive)?.content == "true", result)
+            }
+            else -> throw GatewayException(0, "bad_reply")
+        }
+    }
+}
+
 class GatewayApi(
     private val host: String,
     private val port: Int,
@@ -144,6 +164,26 @@ class GatewayApi(
                 put("lines", JsonArray(lines.takeLast(200).map { JsonPrimitive(it.take(300)) }))
             },
             accessToken,
+        )
+
+    /** Operations this device may run (needs ops.read / ops.manage scopes on the gateway). */
+    suspend fun operations(accessToken: String): List<String> =
+        (get("/api/v1/ops", accessToken)["operations"] as? JsonArray)
+            ?.mapNotNull { ((it as? JsonObject)?.get("id") as? JsonPrimitive)?.content }
+            ?: emptyList()
+
+    /** Dangerous operations answer ConfirmationRequired first; resend with the token to execute. */
+    suspend fun runOperation(accessToken: String, operation: String, args: JsonObject = JsonObject(emptyMap()), confirmToken: String? = null): OperationReply =
+        OperationReply.parse(
+            postAuth(
+                "/api/v1/ops/run",
+                buildJsonObject {
+                    put("operation", operation)
+                    put("args", args)
+                    if (confirmToken != null) put("confirm_token", confirmToken)
+                },
+                accessToken,
+            ),
         )
 
     suspend fun snapshot(accessToken: String): Snapshot = parseSnapshot(get("/api/v1/snapshot", accessToken))

@@ -30,7 +30,15 @@ COLLECT_WINDOW_SECONDS = 600
 ACCESS_TTL_SECONDS = 300
 REFRESH_TTL_SECONDS = 90 * 24 * 3600
 SCOPES = frozenset(
-    {"status.read", "vehicle.read", "camera.read", "media.read", "assistant.use"}
+    {
+        "status.read",
+        "vehicle.read",
+        "camera.read",
+        "media.read",
+        "assistant.use",
+        "ops.read",
+        "ops.manage",
+    }
 )
 DEFAULT_SCOPES = frozenset({"status.read", "vehicle.read"})
 ENROLL_CONTEXT = b"kenpi-enroll-v1"

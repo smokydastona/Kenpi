@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,6 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -78,7 +80,7 @@ fun KenpiTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = scheme, content = content)
 }
 
-private enum class Tab(val label: String) { Dashboard("Dashboard"), Camera("Camera"), Vehicle("Vehicle"), Health("Health"), Assistant("Assistant"), More("More") }
+private enum class Tab(val label: String) { Dashboard("Dashboard"), Camera("Camera"), Vehicle("Vehicle"), Health("Health"), Pi("Pi"), Assistant("Assistant"), More("More") }
 
 @Composable
 fun KenpiApp(model: AppModel) {
@@ -150,6 +152,7 @@ private fun PairedScreen(model: AppModel) {
                 Tab.Camera -> Scope("Camera", state?.get("camera"), "Live preview, media browsing and recording control are unavailable: the A810 Lite protocol is not verified.")
                 Tab.Vehicle -> Scope("Vehicle", state?.get("vehicle"), null)
                 Tab.Health -> Scope("System health", state?.get("status"), null)
+                Tab.Pi -> PiTab(model, ui)
                 Tab.Assistant -> AssistantTab(model, ui, live)
                 Tab.More -> More(model, ui, state?.get("media"))
             }
@@ -211,6 +214,33 @@ private fun More(model: AppModel, ui: Ui, media: kotlinx.serialization.json.Json
     OutlinedButton(onClick = model::reconnect, modifier = Modifier.fillMaxWidth()) { Text("Reconnect now") }
     OutlinedButton(onClick = model::unpair, modifier = Modifier.fillMaxWidth()) { Text("Forget this gateway on this device") }
     Text("Forgetting is local only. Ask the administrator to revoke the device on the gateway.", style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
+private fun PiTab(model: AppModel, ui: Ui) {
+    LaunchedEffect(Unit) { model.refreshServices() }
+    Card(Modifier.fillMaxWidth()) {
+        Text(
+            "Service management uses a fixed list on the Pi. Restarting never touches the dashcam's own recording. Pi Desktop, files, packages, network and power controls are not available yet.",
+            Modifier.padding(12.dp),
+        )
+    }
+    ui.opsNote?.let { Card { Text(it, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.error) } }
+    if (ui.services.isEmpty()) Section("Services", listOf("State" to "No data"))
+    ui.services.forEach { (unit, state) ->
+        Section(unit, listOf("State" to state))
+        OutlinedButton(onClick = { model.requestRestart(unit) }, modifier = Modifier.fillMaxWidth()) { Text("Restart $unit") }
+    }
+    OutlinedButton(onClick = model::refreshServices, modifier = Modifier.fillMaxWidth()) { Text("Refresh") }
+    ui.pendingRestart?.let { pending ->
+        AlertDialog(
+            onDismissRequest = model::cancelRestart,
+            title = { Text("Restart ${pending.unit}?") },
+            text = { Text("The service will stop and start again. This is recorded in the Pi's audit log.") },
+            confirmButton = { TextButton(onClick = model::confirmRestart) { Text("Restart") } },
+            dismissButton = { TextButton(onClick = model::cancelRestart) { Text("Cancel") } },
+        )
+    }
 }
 
 @Composable

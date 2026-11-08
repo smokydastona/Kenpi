@@ -11,6 +11,7 @@ import com.kenpi.gateway.GatewayException
 import com.kenpi.gateway.LiveChannel
 import com.kenpi.gateway.LiveState
 import com.kenpi.gateway.LocalHelper
+import com.kenpi.gateway.OperationReply
 import com.kenpi.gateway.PairingException
 import com.kenpi.gateway.PairingPayload
 import com.kenpi.gateway.PairingProgress
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.put
 
 sealed interface Screen {
     data object Unpaired : Screen
@@ -46,7 +48,12 @@ data class Ui(
     val kenpiLogs: List<String> = emptyList(),
     val probeReport: String? = null,
     val probeBusy: Boolean = false,
+    val services: Map<String, String> = emptyMap(),
+    val pendingRestart: PendingRestart? = null,
+    val opsNote: String? = null,
 )
+
+data class PendingRestart(val unit: String, val token: String)
 
 class AppModel(app: Application) : AndroidViewModel(app) {
     private val store = EncryptedCredentialStore.create(app)
@@ -209,6 +216,70 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 LocalHelper.explain(true, _live.value)
             }
             _ui.value = _ui.value.copy(chat = _ui.value.chat + ("Kenpi" to reply), assistantBusy = false)
+        }
+    }
+
+    private fun opsMessage(e: GatewayException) = when (e.code) {
+        "scope_required" -> "This phone was not granted the ops.read / ops.manage scopes. Re-pair with them to manage services."
+        "feature_disabled" -> "Service management is not enabled on this Kenpi."
+        "confirmation_invalid" -> "The confirmation expired. Try again."
+        "rate_limited" -> "Too many requests. Wait a moment."
+        else -> "Request failed (${e.code})."
+    }
+
+    /** Reads only; shows what the Pi reports for each manageable service. */
+    fun refreshServices() {
+        val api = api ?: return
+        viewModelScope.launch {
+            try {
+                val token = session!!.accessToken()
+                val units = (api.runOperation(token, "list_services") as OperationReply.Done).result["units"] as? kotlinx.serialization.json.JsonArray
+                val found = linkedMapOf<String, String>()
+                for (unit in units?.map { (it as kotlinx.serialization.json.JsonPrimitive).content } ?: emptyList()) {
+                    val done = api.runOperation(token, "service_status", kotlinx.serialization.json.buildJsonObject { put("unit", unit) }) as OperationReply.Done
+                    found[unit] = (done.result["active"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "unknown"
+                }
+                _ui.value = _ui.value.copy(services = found, opsNote = null)
+            } catch (e: GatewayException) {
+                _ui.value = _ui.value.copy(opsNote = opsMessage(e))
+            } catch (e: java.io.IOException) {
+                _ui.value = _ui.value.copy(opsNote = LocalHelper.explain(true, _live.value))
+            }
+        }
+    }
+
+    /** Step one of two: the gateway issues a single-use token; nothing runs until confirmRestart. */
+    fun requestRestart(unit: String) {
+        val api = api ?: return
+        viewModelScope.launch {
+            try {
+                val reply = api.runOperation(session!!.accessToken(), "service_restart", kotlinx.serialization.json.buildJsonObject { put("unit", unit) })
+                if (reply is OperationReply.ConfirmationRequired) _ui.value = _ui.value.copy(pendingRestart = PendingRestart(unit, reply.token), opsNote = null)
+            } catch (e: GatewayException) {
+                _ui.value = _ui.value.copy(opsNote = opsMessage(e))
+            } catch (e: java.io.IOException) {
+                _ui.value = _ui.value.copy(opsNote = LocalHelper.explain(true, _live.value))
+            }
+        }
+    }
+
+    fun cancelRestart() { _ui.value = _ui.value.copy(pendingRestart = null) }
+
+    fun confirmRestart() {
+        val api = api ?: return
+        val pending = _ui.value.pendingRestart ?: return
+        _ui.value = _ui.value.copy(pendingRestart = null)
+        viewModelScope.launch {
+            try {
+                val reply = api.runOperation(session!!.accessToken(), "service_restart", kotlinx.serialization.json.buildJsonObject { put("unit", pending.unit) }, pending.token)
+                val ok = (reply as? OperationReply.Done)?.ok == true
+                _ui.value = _ui.value.copy(opsNote = if (ok) "${pending.unit} restart requested; re-checking." else "Restart of ${pending.unit} did not succeed: ${(reply as? OperationReply.Done)?.result?.get("detail") ?: "no detail"}")
+            } catch (e: GatewayException) {
+                _ui.value = _ui.value.copy(opsNote = opsMessage(e))
+            } catch (e: java.io.IOException) {
+                _ui.value = _ui.value.copy(opsNote = LocalHelper.explain(true, _live.value))
+            }
+            refreshServices()
         }
     }
 
