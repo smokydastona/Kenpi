@@ -3,6 +3,9 @@ package com.kenpi.companion
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import com.kenpi.gateway.CameraProbe
 import com.kenpi.gateway.GatewayApi
 import com.kenpi.gateway.GatewayException
 import com.kenpi.gateway.LiveChannel
@@ -16,11 +19,13 @@ import com.kenpi.gateway.Pairer
 import com.kenpi.gateway.PinnedTls
 import com.kenpi.gateway.Session
 import com.kenpi.gateway.WireGuardParameters
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 sealed interface Screen {
     data object Unpaired : Screen
@@ -39,6 +44,8 @@ data class Ui(
     val chat: List<Pair<String, String>> = emptyList(),
     val assistantBusy: Boolean = false,
     val kenpiLogs: List<String> = emptyList(),
+    val probeReport: String? = null,
+    val probeBusy: Boolean = false,
 )
 
 class AppModel(app: Application) : AndroidViewModel(app) {
@@ -143,6 +150,31 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private fun connectionLabel(): String = _live.value.let { it::class.simpleName.orEmpty() + (if (it is LiveState.Disconnected) ": ${it.reason}" else "") }
 
     /** Shares this phone's recent connection log with Kenpi to help diagnose problems. Best effort. */
+    /** Survey the camera on the phone's Wi-Fi (read-only); the report is for capturing evidence. */
+    fun probeCamera() {
+        if (_ui.value.probeBusy) return
+        _ui.value = _ui.value.copy(probeBusy = true, probeReport = null)
+        viewModelScope.launch {
+            val report = withContext(Dispatchers.IO) {
+                try {
+                    val cm = getApplication<Application>().getSystemService(ConnectivityManager::class.java)
+                    val wifi = cm.allNetworks.firstOrNull {
+                        cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+                    } ?: return@withContext "Not connected to Wi-Fi. Join the camera's Wi-Fi first."
+                    val gateway = cm.getLinkProperties(wifi)?.routes
+                        ?.firstOrNull { it.isDefaultRoute && it.gateway != null }?.gateway?.hostAddress
+                        ?: return@withContext "No gateway address on this Wi-Fi network."
+                    CameraProbe.probe(gateway, connect = { target, timeout ->
+                        wifi.socketFactory.createSocket().also { it.connect(target, timeout) }
+                    }).render()
+                } catch (e: Exception) {
+                    "Probe failed: ${e.javaClass.simpleName}"
+                }
+            }
+            _ui.value = _ui.value.copy(probeBusy = false, probeReport = report)
+        }
+    }
+
     fun uploadLogs() {
         val api = api ?: return
         val s = session ?: return

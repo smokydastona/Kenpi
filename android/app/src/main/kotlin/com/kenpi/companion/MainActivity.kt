@@ -205,6 +205,8 @@ private fun More(model: AppModel, ui: Ui, media: kotlinx.serialization.json.Json
         else listOf("Tunnel address" to wg.address, "Gateway" to wg.gatewayAddress, "Port" to wg.listenPort.toString()),
     )
     Section("This device", listOf("Device ID" to (ui.deviceId ?: "-"), "Key" to "Android Keystore, P-256, non-exportable"))
+    Section("Camera network probe", listOf("Read-only" to "Lists open TCP ports on the Wi-Fi gateway you are joined to (the camera's hotspot) and what they answer. Observations only; it does not control the camera.") + (ui.probeReport?.lines()?.filter { it.isNotBlank() }?.map { "•" to it } ?: emptyList()))
+    OutlinedButton(onClick = model::probeCamera, enabled = !ui.probeBusy, modifier = Modifier.fillMaxWidth()) { Text(if (ui.probeBusy) "Probing…" else "Probe camera network") }
     Section("Diagnostics", ui.log.takeLast(15).map { "•" to it })
     OutlinedButton(onClick = model::reconnect, modifier = Modifier.fillMaxWidth()) { Text("Reconnect now") }
     OutlinedButton(onClick = model::unpair, modifier = Modifier.fillMaxWidth()) { Text("Forget this gateway on this device") }

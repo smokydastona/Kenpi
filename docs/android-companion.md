@@ -76,3 +76,15 @@ transcript fills the text box and is only sent after you press Send) and
 `TextToSpeech` (optional "Read replies aloud"). No extra dependencies or
 permissions. **Not compiled or run**: it needs the Android CI job (see CI above).
 If the phone has no recognizer or TTS engine the UI says so.
+
+## Camera network probe (capture aid)
+
+The More tab has a "Probe camera network" button (`CameraProbe` in `:core`, unit-tested on
+the JVM against a local server; the `AppModel`/UI wiring is uncompiled here). With the phone
+joined to the camera's Wi-Fi it connects, over that Wi-Fi network only, to the gateway
+address and records which of a fixed list of common TCP ports accept a connection and the
+HTTP/banner text they answer. It refuses non-private addresses, sends no credentials or
+commands, and redacts cookies, tokens, SSIDs and MAC addresses. It is not a packet
+capture and does not make the app able to control a 70mai camera: use PCAPdroid (or a rooted
+`tcpdump`) for captures. PCAPdroid is GPL-3.0, so Kenpi neither embeds nor copies it; an
+in-app VpnService capture engine is not implemented.
