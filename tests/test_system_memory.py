@@ -278,3 +278,60 @@ class HostnameResolutionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UsbTests(unittest.TestCase):
+    def make(self, root: Path) -> Path:
+        usb = root / "bus/usb/devices"
+        (usb / "usb1").mkdir(parents=True)
+        for name, vid, pid, bound in (
+            ("1-1", "0d8c", "0014", True),
+            ("1-2", "dead", "beef", False),
+        ):
+            device = usb / name
+            device.mkdir()
+            (device / "idVendor").write_text(vid)
+            (device / "idProduct").write_text(pid)
+            (device / "speed").write_text("480")
+            interface = usb / f"{name}:1.0"
+            interface.mkdir()
+            if bound:
+                (interface / "driver").mkdir()
+            (device / f"{name}:1.0").mkdir()
+            if bound:
+                (device / f"{name}:1.0" / "driver").mkdir()
+        return root
+
+    def test_reads_devices_and_flags_unbound(self):
+        from kenpi.diagnostics.system import read_usb_devices
+
+        with tempfile.TemporaryDirectory() as d:
+            devices = read_usb_devices(self.make(Path(d)))
+            self.assertEqual([x["name"] for x in devices], ["1-1", "1-2"])
+            self.assertEqual(devices[0]["unbound_interfaces"], 0)
+            self.assertEqual(devices[1]["unbound_interfaces"], 1)
+            ctx = DiagnosticContext(
+                host_health=lambda: {},
+                system=lambda: {
+                    "usb_devices": ["1-1", "1-2"],
+                    "usb_details": devices,
+                },
+            )
+            usb = {r.name: r for r in check_system(ctx)}["usb"]
+            self.assertEqual(usb.status, Status.WARN)
+            self.assertIn("dead:beef", usb.detail)
+
+    def test_unreadable_bus_is_none(self):
+        from kenpi.diagnostics.system import read_usb_devices
+
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(read_usb_devices(Path(d)))
+
+    def test_unbound_maps_to_fault(self):
+        from kenpi.diagnostics.faults import detect_faults
+        from kenpi.diagnostics.models import CheckResult, Subsystem
+
+        faults = detect_faults(
+            [CheckResult(Subsystem.HOST, "usb", Status.WARN, "x", {})], None
+        )
+        self.assertEqual([f.id for f in faults], ["host.usb_unbound"])

@@ -26,6 +26,7 @@ class RemediationAction:
     )
     rollback: Callable[[], None] | None = None
     timeout: float = 30.0
+    fixes: tuple[str, ...] = ()  # fault ids this action is meant to clear
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,12 +57,20 @@ class RemediationRegistry:
             raise ValueError(f"action already registered: {action.id}")
         self._actions[action.id] = action
 
+    def get(self, action_id: str) -> RemediationAction | None:
+        return self._actions.get(action_id)
+
     def permissions(self) -> dict[str, Permission]:
         return {key: action.permission for key, action in self._actions.items()}
 
     def describe(self) -> list[dict[str, object]]:
         return [
-            {"id": a.id, "description": a.description, "permission": a.permission.name}
+            {
+                "id": a.id,
+                "description": a.description,
+                "permission": a.permission.name,
+                "fixes": list(a.fixes),
+            }
             for a in self._actions.values()
         ]
 

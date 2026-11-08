@@ -477,17 +477,40 @@ def check_system(context: DiagnosticContext) -> list[CheckResult]:
             )
         )
     usb = data.get("usb_devices")
-    results.append(
-        _unknown(Subsystem.HOST, "usb", "USB bus not readable")
-        if usb is None
-        else CheckResult(
-            Subsystem.HOST,
-            "usb",
-            Status.OK,
-            f"{len(usb)} USB device(s) enumerated",
-            {"devices": usb},
-        )
-    )
+    if usb is None:
+        results.append(_unknown(Subsystem.HOST, "usb", "USB bus not readable"))
+    else:
+        details = data.get("usb_details") or []
+        unbound = [
+            f"{d.get('vendor_id') or '????'}:{d.get('product_id') or '????'}"
+            for d in details
+            if (d.get("unbound_interfaces") or 0) > 0
+        ]
+        slow = [
+            d["name"]
+            for d in details
+            if d.get("speed_mbps") is not None and d["speed_mbps"] < 480
+        ]
+        if unbound:
+            results.append(
+                CheckResult(
+                    Subsystem.HOST,
+                    "usb",
+                    Status.WARN,
+                    f"{len(usb)} USB device(s); no driver bound for: {', '.join(unbound)}",
+                    {"devices": usb, "unbound": unbound, "below_480mbps": slow},
+                )
+            )
+        else:
+            results.append(
+                CheckResult(
+                    Subsystem.HOST,
+                    "usb",
+                    Status.OK,
+                    f"{len(usb)} USB device(s) enumerated",
+                    {"devices": usb, "below_480mbps": slow},
+                )
+            )
     return results
 
 

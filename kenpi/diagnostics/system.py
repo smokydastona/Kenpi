@@ -84,6 +84,7 @@ def collect_system(
         "swap_used_bytes": None,
         "throttled_flags": None,
         "usb_devices": None,
+        "usb_details": None,
     }
     load = _read(proc_root / "loadavg")
     if load:
@@ -105,16 +106,49 @@ def collect_system(
     if mounts is not None:
         result["readonly_mounts"] = readonly_mounts(mounts)
     result["throttled_flags"] = read_throttled(sys_root, vcgencmd)
+    details = read_usb_devices(sys_root)
+    if details is not None:
+        result["usb_devices"] = [d["name"] for d in details]
+        result["usb_details"] = details
+    return result
+
+
+def read_usb_devices(sys_root: Path) -> list[dict[str, Any]] | None:
+    """USB devices (not root hubs) from sysfs: ids, product string, speed and driver binding.
+
+    `unbound_interfaces` counts interfaces with no kernel driver attached; None when the
+    device has no readable interface directories. Nothing is inferred about why.
+    """
     usb = sys_root / "bus/usb/devices"
     try:
-        result["usb_devices"] = sorted(
-            p.name
-            for p in usb.iterdir()
-            if ":" not in p.name and not p.name.startswith("usb")
-        )
+        entries = sorted(usb.iterdir())
     except OSError:
-        pass
-    return result
+        return None
+    devices: list[dict[str, Any]] = []
+    for path in entries:
+        if ":" in path.name or path.name.startswith("usb"):
+            continue
+        speed = _read(path / "speed")
+        try:
+            speed_mbps = float(speed) if speed else None
+        except ValueError:
+            speed_mbps = None
+        interfaces = [p for p in path.glob(f"{path.name}:*") if p.is_dir()]
+        devices.append(
+            {
+                "name": path.name,
+                "vendor_id": _read(path / "idVendor"),
+                "product_id": _read(path / "idProduct"),
+                "product": (_read(path / "product") or "")[:64] or None,
+                "speed_mbps": speed_mbps,
+                "unbound_interfaces": (
+                    sum(1 for i in interfaces if not (i / "driver").exists())
+                    if interfaces
+                    else None
+                ),
+            }
+        )
+    return devices
 
 
 def _handshake_ages(

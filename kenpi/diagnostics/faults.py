@@ -55,6 +55,12 @@ def detect_faults(results: list[CheckResult], logs: LogAnalysis | None) -> list[
         "A filesystem on the Pi is read-only",
     )
     from_check(
+        Subsystem.HOST,
+        "usb",
+        "host.usb_unbound",
+        "A USB device is connected but no driver is bound to it",
+    )
+    from_check(
         Subsystem.NETWORK,
         "tls_certificate",
         "network.cert_expiring",

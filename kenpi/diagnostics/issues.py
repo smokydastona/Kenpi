@@ -186,6 +186,20 @@ _ISSUES = (
         ("read-only", "readonly", "sd card", "corrupt", "i/o error"),
     ),
     KnownIssue(
+        "host.usb_unbound",
+        "USB device without a driver",
+        "A USB device enumerated but the kernel bound no driver to at least one interface. "
+        "This is observed, not diagnosed: the device may be unsupported, need firmware, or be failing.",
+        (
+            Step("Note the vendor:product id from the finding and look it up."),
+            Step("Try another USB port and a short, known-good cable."),
+            Step(
+                "Check the kernel log (journalctl -k) around the time it was plugged in."
+            ),
+        ),
+        ("usb", "dongle", "microphone", "audio device", "not detected"),
+    ),
+    KnownIssue(
         "network.cert_expiring",
         "Gateway certificate expiring",
         "The gateway certificate is expired or has under 30 days left. Re-issuing it changes the pinned fingerprint, so phones must re-pair.",

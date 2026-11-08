@@ -231,6 +231,9 @@ class AssistantService:
                     "Delete cached synthesized audio",
                     Permission.ASK,
                     self._clear_cache,
+                    precondition=self._cache_precondition,
+                    verify=self._cache_verify,
+                    fixes=("host.storage_low",),
                 )
             )
         self.diagnostics = DiagnosticsEngine(
@@ -457,9 +460,26 @@ class AssistantService:
             return 503, {"error": "assistant_unavailable"}
         return 404, {"error": "not_found"}
 
+    def _cache_dir(self) -> Path | None:
+        return (self._data_dir / "cache") if self._data_dir else None
+
+    def _cache_precondition(self) -> str | None:
+        cache = self._cache_dir()
+        if cache is None or not cache.exists():
+            return "there is no cache to clear"
+        if cache.is_symlink() or not cache.is_dir():
+            return "the cache path is not a plain directory"
+        return None
+
+    def _cache_verify(self) -> str | None:
+        cache = self._cache_dir()
+        return (
+            "the cache still exists" if cache is not None and cache.exists() else None
+        )
+
     def _clear_cache(self) -> str:
-        cache = (self._data_dir / "cache") if self._data_dir else None
-        if cache is None or not cache.is_dir():
+        cache = self._cache_dir()
+        if cache is None or not cache.is_dir() or cache.is_symlink():
             return "no cache to clear"
         shutil.rmtree(cache)
         return "cache cleared"

@@ -238,6 +238,39 @@ class DiagnosticsTests(unittest.TestCase):
             kinds = [r["kind"] for r in assistant.diagnostics.history.recent()]
             self.assertIn("verification", kinds)
 
+    def test_cache_precondition_blocks_when_nothing_to_clear(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            assistant = make_assistant(d)
+            result, report = assistant.diagnostics.remediate(
+                "clear_assistant_cache", approved=True
+            )
+            self.assertFalse(result.executed)
+            self.assertIn("precondition", result.detail)
+            self.assertIsNone(report)
+
+    def test_cache_symlink_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as t:
+            assistant = make_assistant(d)
+            (Path(t) / "keep.txt").write_text("x")
+            (Path(d) / "cache").symlink_to(t)
+            result, _ = assistant.diagnostics.remediate(
+                "clear_assistant_cache", approved=True
+            )
+            self.assertFalse(result.executed)
+            self.assertTrue((Path(t) / "keep.txt").exists())
+
+    def test_verification_records_targeted_faults(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            assistant = make_assistant(d)
+            (Path(d) / "cache").mkdir()
+            assistant.diagnostics.remediate("clear_assistant_cache", approved=True)
+            last = [
+                r
+                for r in assistant.diagnostics.history.recent()
+                if r["kind"] == "verification"
+            ][-1]
+            self.assertIn("targeted_still_present", last)
+
     def test_cannot_register_weak_recording_action(self) -> None:
         with self.assertRaises(ValueError):
             RemediationRegistry().register(

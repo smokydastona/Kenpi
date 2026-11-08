@@ -137,12 +137,16 @@ class DiagnosticsEngine:
         if not result.executed:
             return result, None
         after = self.run()
+        action = self.remediation.get(action_id)
+        targeted = set(action.fixes) if action else set()
         self.history.record(
             "verification",
             self._context.clock(),
             action_id=action_id,
             resolved=sorted(before - after.fault_ids()),
             remaining=sorted(after.fault_ids()),
+            # An executed action is not a fix: these targeted faults are still present.
+            targeted_still_present=sorted(targeted & after.fault_ids()),
         )
         return result, after
 
