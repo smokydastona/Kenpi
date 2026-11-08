@@ -111,3 +111,23 @@ RTSP live paths under `/livestream/`. That targets the A810, not the A810 Lite,
 so all of it is E0 hypothesis. Verify by capturing your own camera's vendor-app
 traffic (mitmproxy, Wireshark) and recording results as fixtures before any
 capability is enabled.
+
+## Pasted claims about token-signed CGI endpoints (E0, unverified, not implemented)
+
+An operator-supplied summary (source unverified; it cites a blog and a toolbox for other
+models) claims that "modern" 70mai cameras require a 32-hex pairing token and
+timestamp/sign hash on every `/cgi-bin/*.cgi` call; that `getfilecount.cgi`,
+`getfilelist.cgi`, `setwifiboot.cgi` and a Novatek `?custom=1&cmd=3015` XML command exist;
+that file-type folders are numbered 0/1/3/6/8; that the camera keeps only one pairing
+token (re-pairing from another client would lock out the official app); and that hotspot
+addresses are 192.72.1.1 or 192.168.0.1. Kenpi treats every item as a hypothesis for the
+A810 Lite: none is coded, none of the endpoints may be called, and no token or signing
+scheme is derived or reused from other models (see the rules above and the Kino note).
+
+What would change that: a redacted capture from the user's own A810 Lite showing the exact
+requests. Pairing carries a real risk: a Kenpi-created token could invalidate the phone
+app's pairing, so the first capture must be passive (official app only), and any later
+Kenpi pairing needs an explicit warning and user confirmation. Settings changes need
+independent read-back and restoration (docs/evidence-and-validation.md). The A810 Lite
+manual setting names (clip length, G-sensor, HDR, auto-off) are manual features, not
+verified protocol parameters.
