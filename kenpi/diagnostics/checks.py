@@ -174,6 +174,20 @@ def check_network_routes(context: DiagnosticContext) -> list[CheckResult]:
                 else "no resolver configured",
             )
         )
+    resolves = data.get("hostname_resolves")
+    if resolves is None:
+        out.append(_unknown(net, "dns_resolution", "resolver did not answer in time"))
+    else:
+        out.append(
+            CheckResult(
+                net,
+                "dns_resolution",
+                Status.OK if resolves else Status.WARN,
+                "this host's name resolves"
+                if resolves
+                else "this host's own name does not resolve",
+            )
+        )
     wg = data.get("wireguard_interfaces")
     out.append(
         _unknown(net, "wireguard", "interfaces unreadable")

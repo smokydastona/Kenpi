@@ -76,11 +76,11 @@ class ConversationTests(unittest.TestCase):
             self.assertEqual(ConversationStore(path).recent("a"), [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class NetworkTests(unittest.TestCase):
+    @staticmethod
+    def _no_answer(_name):
+        raise OSError("resolver unavailable")
+
     def test_collects_route_dns_wireguard_and_cert(self) -> None:
         from datetime import datetime, timedelta, timezone
 
@@ -117,8 +117,12 @@ class NetworkTests(unittest.TestCase):
             (wg / "uevent").write_text("DEVTYPE=wireguard\n")
             pem = root / "gw.pem"
             pem.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
-            data = collect_network(root, root / "sys", root / "resolv.conf", pem)
-            missing = collect_network(root / "x", root / "x", root / "x", None)
+            data = collect_network(
+                root, root / "sys", root / "resolv.conf", pem, resolver=lambda n: "x"
+            )
+            missing = collect_network(
+                root / "x", root / "x", root / "x", None, resolver=self._no_answer
+            )
         self.assertEqual(data["default_gateway"], "192.168.0.1")
         self.assertEqual(data["dns_servers"], ["192.168.0.1"])
         self.assertEqual(data["wireguard_interfaces"], ["wg0"])
@@ -232,3 +236,45 @@ class WireGuardHandshakeTests(unittest.TestCase):
                 ("no-such-wg",),
             )
             self.assertIsNone(data["wireguard_handshake_age"])
+
+
+class HostnameResolutionTests(unittest.TestCase):
+    def test_resolves_fails_and_hangs(self):
+        import socket
+        import threading
+
+        from kenpi.diagnostics.system import _hostname_resolves
+
+        self.assertTrue(_hostname_resolves(lambda n: "127.0.0.1", lambda: "kenpi"))
+
+        def fail(_):
+            raise socket.gaierror("no")
+
+        self.assertFalse(_hostname_resolves(fail, lambda: "kenpi"))
+        block = threading.Event()
+        self.addCleanup(block.set)
+        self.assertIsNone(
+            _hostname_resolves(lambda n: block.wait(5), lambda: "kenpi", timeout=0.1)
+        )
+
+    def test_check_statuses(self):
+        from kenpi.diagnostics.checks import check_network_routes
+        from kenpi.diagnostics.models import DiagnosticContext
+        from kenpi.diagnostics.models import Status
+
+        def status(value):
+            results = check_network_routes(
+                DiagnosticContext(
+                    host_health=lambda: {},
+                    network=lambda: {"hostname_resolves": value},
+                )
+            )
+            return next(r for r in results if r.name == "dns_resolution").status
+
+        self.assertIs(status(True), Status.OK)
+        self.assertIs(status(False), Status.WARN)
+        self.assertIs(status(None), Status.UNKNOWN)
+
+
+if __name__ == "__main__":
+    unittest.main()

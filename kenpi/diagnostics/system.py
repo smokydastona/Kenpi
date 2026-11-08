@@ -7,9 +7,11 @@ Throttle bits are documented in the Raspberry Pi firmware docs (get_throttled).
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
+import threading
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 THROTTLE_BITS = {
     0: "under-voltage now",
@@ -146,6 +148,27 @@ def _handshake_ages(
     return ages
 
 
+def _hostname_resolves(
+    resolver: Callable[[str], Any], hostname: Callable[[], str], timeout: float = 3.0
+) -> bool | None:
+    """Whether the system resolver can resolve this host's own name (None = unknown)."""
+    box: dict[str, bool] = {}
+
+    def work() -> None:
+        try:
+            resolver(hostname())
+            box["ok"] = True
+        except socket.gaierror:
+            box["ok"] = False
+        except OSError:
+            pass
+
+    worker = threading.Thread(target=work, name="dns-check", daemon=True)
+    worker.start()
+    worker.join(timeout)
+    return box.get("ok")
+
+
 def collect_network(
     proc_root: Path = Path("/proc"),
     sys_root: Path = Path("/sys"),
@@ -153,6 +176,8 @@ def collect_network(
     cert_path: Path | None = None,
     now: float | None = None,
     wg_command: Sequence[str] = ("wg", "show"),
+    resolver: Callable[[str], Any] | None = None,
+    hostname: Callable[[], str] = socket.gethostname,
 ) -> dict[str, Any]:
     """Routing, resolver, WireGuard interface and gateway certificate evidence (None = unknown)."""
     import time
@@ -164,7 +189,11 @@ def collect_network(
         "wireguard_interfaces": None,
         "wireguard_handshake_age": None,
         "cert_days_left": None,
+        "hostname_resolves": None,
     }
+    result["hostname_resolves"] = _hostname_resolves(
+        resolver or socket.gethostbyname, hostname
+    )
     routes = _read(proc_root / "net/route")
     if routes is not None:
         result["has_default_route"] = False
