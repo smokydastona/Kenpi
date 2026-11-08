@@ -125,3 +125,17 @@ and pinout are verified.
 Licensing: GPL-3.0 code cannot be copied into Kenpi without deciding to relicense
 or isolate it; "none stated" means no permission to copy. Kenpi's own K-Line
 codec is written from the public SAE J1979 / ISO message formats instead.
+
+## K-Line session layer (host-simulated only)
+
+`kenpi/vehicle/kline_session.py` is an independent, MIT-compatible implementation of
+5-baud and fast initialisation, keyword classification (ISO 9141-2 vs ISO 14230),
+request framing with P3/P4 spacing, and response timeouts. It uses an abstract
+`KLinePort`; no real port, UART pins or L9637D wiring exist yet. It sends only the
+read-only services in `kline.py`. TesterPresent keep-alive is not implemented
+(not read-only), so a session must be re-initialised after the ECU's idle timeout.
+
+Validated only against a simulated ECU (`tests/test_kline_session.py`). The timing
+constants and keyword handling are from memory of the public standards and must be
+checked against the standards and a bench ECU. Whether the 2005 Fit ECU answers
+either init is unknown.
