@@ -145,13 +145,24 @@ def _listen(assistant: AssistantService, args: argparse.Namespace) -> int:
         )
         if not device:
             raise AudioUnavailable("no capture device found")
-        transcriber = WhisperCppTranscriber(
-            settings.whisper_binary, Path(settings.whisper_model)
-        )
-        if not settings.whisper_model or not transcriber.available():
-            raise AudioUnavailable(
-                "whisper.cpp binary or whisper_model is not configured"
+        if settings.transcriber == "moonshine":
+            from kenpi.voice.moonshine import MoonshineTranscriber
+
+            transcriber = MoonshineTranscriber(
+                settings.moonshine_model_path, settings.moonshine_arch
             )
+            if not transcriber.available():
+                raise AudioUnavailable(
+                    "moonshine-voice or moonshine_model_path is not configured"
+                )
+        else:
+            transcriber = WhisperCppTranscriber(
+                settings.whisper_binary, Path(settings.whisper_model)
+            )
+            if not settings.whisper_model or not transcriber.available():
+                raise AudioUnavailable(
+                    "whisper.cpp binary or whisper_model is not configured"
+                )
     except AudioUnavailable as error:
         print(
             f"Voice input unavailable (text-only still works): {error}", file=sys.stderr

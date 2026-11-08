@@ -47,6 +47,7 @@ from kenpi.voice.engines import (
     OpenVoiceEngine,
     VoiceboxEngine,
 )
+from kenpi.voice.moonshine import MoonshineTTSEngine
 from kenpi.voice.profiles import (
     ProfileStore,
     VoiceProfile,
@@ -83,6 +84,10 @@ class AssistantSettings:
     openvoice_url: str = ""
     openvoice_allow_remote: bool = False
     chatterbox_url: str = ""
+    transcriber: str = "whisper"  # or "moonshine"
+    moonshine_model_path: str = ""
+    moonshine_arch: str = ""
+    moonshine_tts: bool = False
     voicebox_url: str = ""
     voicebox_allow_remote: bool = False
     voicebox_default_profile: str = ""
@@ -176,6 +181,7 @@ class AssistantService:
                     "Invalid %s URL; engine left unconfigured", engine_class.id
                 )
                 engines.register(engine_class(""))
+        engines.register(MoonshineTTSEngine(settings.moonshine_tts))
         try:
             engines.register(
                 VoiceboxEngine(

@@ -195,6 +195,19 @@ Kenpi calls `POST /generate`, polls `GET /generate/{id}/status`, then `GET /audi
 
 Ideas noted but not built: Voicebox's `pedalboard` effects presets (e.g. a radio filter), and Chatterbox Turbo paralinguistic tags (`[sigh]`) for the characters, which need a Turbo-specific text path.
 
+### Moonshine (optional speech-to-text and text-to-speech)
+
+[Moonshine Voice](https://github.com/moonshine-ai/moonshine) (MIT code; models MIT by default) runs on-device and lists Raspberry Pi as supported. Install it yourself (`pip install moonshine-voice`); it is not a Kenpi dependency.
+
+```
+transcriber = "moonshine"                 # default "whisper"
+moonshine_model_path = "/var/lib/kenpi/assistant/models/moonshine-en"
+moonshine_arch = ""                       # optional, passed through as model_arch
+moonshine_tts = true                      # registers the `moonshine_tts` engine
+```
+
+`kenpi-assist listen` then transcribes with `MoonshineTranscriber` (WAV in, text out). `moonshine_tts` is an offline, no-cloning engine; use it by giving a voice profile `engine = "moonshine_tts"` (`base_speaker` may name a Moonshine catalog voice), or as a fallback engine. Use only English streaming models or others you have confirmed are MIT: Moonshine's legacy non-English non-streaming models are non-commercial. The SDK calls follow Moonshine's docs and are **unvalidated against the installed package, the model formats or a Pi 5**; latency is unmeasured. Not used: `AgentFlow` (Kenpi's planner and policy engine own intent handling), voice cloning (Kenpi requires its own consent gate), and streaming/mic classes.
+
 ## Companion phone: awareness and log exchange
 
 Pair a phone with the `assistant.use` scope (not granted by default):
