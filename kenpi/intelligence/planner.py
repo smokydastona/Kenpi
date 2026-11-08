@@ -82,6 +82,10 @@ _RULES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
             r"\b(show|display|open|switch to)\b.*\b(camera|preview|live)\b",
             "show_camera_preview",
         ),
+        (
+            r"\b(engine|coolant|rpm|revs|vehicle speed|how fast)\b",
+            "read_vehicle_data",
+        ),
         (r"\btemperature\b", "system_status"),
         (r"\b(status|how is kenpi|how are you)\b", "system_status"),
         (r"\b(forget|clear|delete)\b.*\b(preferences|memory)\b", "clear_preferences"),
@@ -173,6 +177,21 @@ class Planner:
             if character is None:
                 return Plan((), 0.5, "Which character would you like?")
             return Plan((PlanStep(tool, {"character": character.id}),), 0.85)
+        if tool == "read_vehicle_data":
+            lowered = text.lower()
+            if "coolant" in lowered or "engine temp" in lowered:
+                quantity = "coolant_temperature"
+            elif "rpm" in lowered or "revs" in lowered or "engine speed" in lowered:
+                quantity = "engine_speed"
+            elif "speed" in lowered or "how fast" in lowered:
+                quantity = "vehicle_speed"
+            else:
+                return Plan(
+                    (),
+                    0.5,
+                    "Which value: coolant temperature, engine speed or vehicle speed?",
+                )
+            return Plan((PlanStep(tool, {"quantity": quantity}),), 0.85)
         if tool == "system_status" and "temperature" in text.lower():
             return Plan((PlanStep(tool, {"topic": "temperature"}),), 0.8)
         return Plan((PlanStep(tool),), 0.85)

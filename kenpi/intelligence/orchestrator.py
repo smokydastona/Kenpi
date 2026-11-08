@@ -13,7 +13,7 @@ from kenpi.core.events import EventBus, EventType
 from kenpi.intelligence.approvals import ApprovalStore, PendingApproval
 from kenpi.intelligence.memory import ConversationStore, SessionStore
 from kenpi.intelligence.planner import Plan, Planner
-from kenpi.intelligence.tools import PolicyEngine, ToolRegistry
+from kenpi.intelligence.tools import PolicyEngine, ToolRegistry, bind_cancel
 from kenpi.voice.characters import CharacterVoice
 
 logger = logging.getLogger(__name__)
@@ -72,6 +72,16 @@ class Orchestrator:
         self._policy = policy or PolicyEngine()
         self._sessions = sessions or SessionStore()
         self._events = events
+        self._active: set[threading.Event] = set()
+        self._active_lock = threading.Lock()
+
+    def cancel_running(self) -> int:
+        """Signal every running tool to stop; cooperative handlers observe cancelled()."""
+        with self._active_lock:
+            events = list(self._active)
+        for event in events:
+            event.set()
+        return len(events)
 
     def handle(
         self,
@@ -185,23 +195,33 @@ class Orchestrator:
         )
         return outcome
 
-    @staticmethod
-    def _run(tool: Any, args: dict[str, Any], reason: str) -> Outcome:
+    def _run(self, tool: Any, args: dict[str, Any], reason: str) -> Outcome:
         """Run a handler in a worker thread so a hung tool cannot block the assistant."""
         box: dict[str, Any] = {}
+        cancel = threading.Event()
+        with self._active_lock:
+            self._active.add(cancel)
 
         def work() -> None:
+            bind_cancel(cancel)
             try:
                 box["result"] = tool.handler(args)
             except Exception as error:
                 box["error"] = type(error).__name__
+            finally:
+                bind_cancel(None)
 
         worker = threading.Thread(target=work, name=f"tool-{tool.name}", daemon=True)
         worker.start()
         worker.join(tool.timeout)
+        with self._active_lock:
+            self._active.discard(cancel)
         if worker.is_alive():
+            cancel.set()
             logger.warning("Tool %s timed out after %ss", tool.name, tool.timeout)
             return Outcome(tool.name, False, f"tool timed out after {tool.timeout:g}s")
+        if cancel.is_set():
+            return Outcome(tool.name, False, "tool was cancelled")
         if "error" in box:
             logger.warning("Tool %s failed: %s", tool.name, box["error"])
             return Outcome(tool.name, False, f"tool failed: {box['error']}")

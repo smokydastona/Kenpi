@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -11,6 +12,19 @@ from kenpi.core.permissions import Permission, validate_permission
 logger = logging.getLogger(__name__)
 
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
+
+_local = threading.local()
+
+
+def bind_cancel(event: threading.Event | None) -> None:
+    """Attach the running tool's cancel event to the current worker thread."""
+    _local.event = event
+
+
+def cancelled() -> bool:
+    """True once the running tool was cancelled, timed out or the assistant stopped."""
+    event = getattr(_local, "event", None)
+    return event is not None and event.is_set()
 
 
 @dataclass(frozen=True, slots=True)

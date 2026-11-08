@@ -119,3 +119,13 @@ real unittest run (failures and skips are recorded as such). Each file carries
 the commit and whether the tree was dirty. The files are not committed; they
 are only meaningful for the commit that generated them. Integration and
 dependency-license reports are not generated yet.
+
+## Integration and dependency audits
+
+`python -m kenpi.tools.audit [--output validation] [--strict]` writes
+`integration-report.json` (Python modules no entry point can import, i.e. implemented
+but disconnected) and `dependency-licences.json` (installed Python runtime dependency
+licences from package metadata; Android and firmware dependencies are listed with
+verdict `unknown` because they are not audited). Licence data is evidence for review,
+not legal clearance; `--strict` exits 1 on copyleft Python dependencies. Generated JSON
+is not committed.

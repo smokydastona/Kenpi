@@ -299,3 +299,17 @@ When a WireGuard interface exists, `wg show <iface> latest-handshakes` gives the
 age of the newest peer handshake (peer keys are discarded). No handshake in 180 s
 is a `warn` (an idle tunnel without keepalive looks identical); if `wg` is
 missing or unprivileged the check is `unknown`. Not run against a real tunnel.
+
+## Vehicle readings and tool cancellation
+
+`read_vehicle_data` (permission AUTOMATIC, read-only) reads coolant temperature,
+engine speed or vehicle speed through `VehicleLinkService.diagnose()`: the Pi asks the
+Heltec controller to relay one SAE J1979 mode 01 request. It is refused unless the
+vehicle link is `connected`. A controller timeout, bus-unavailable or negative response
+is reported as "the vehicle did not return ...", never as a value. Until the controller
+firmware K-Line driver exists and is bench-validated, this tool has no real data source.
+
+Tools run in worker threads. Each gets a cancel event, observable from handlers via
+`kenpi.intelligence.tools.cancelled()`. The event is set when a tool times out and when
+the assistant service stops (`Orchestrator.cancel_running()`), so in-flight vehicle
+reads are cancelled instead of being abandoned.

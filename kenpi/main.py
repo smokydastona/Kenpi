@@ -115,6 +115,7 @@ def _build_assistant(config, events, library, link, coordinator_status):
             INITIAL_CAPABILITIES,
             coordinator=coordinator_status,
             vehicle=(lambda: link.snapshot().describe()) if link else None,
+            diagnose=link.diagnose if link else None,
             media_library=library,
         )
     except Exception:

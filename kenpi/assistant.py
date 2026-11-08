@@ -6,13 +6,16 @@ recording and the status API are never affected.
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import logging
 import shutil
+import time
 import tomllib
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 from kenpi.companion import CompanionRegistry, redact
 from kenpi.core.events import EventBus, EventType
@@ -27,7 +30,7 @@ from kenpi.intelligence.memory import ConversationStore, PreferenceMemory, Sessi
 from kenpi.intelligence.orchestrator import Orchestrator
 from kenpi.intelligence.provider import ChatCompletionsProvider
 from kenpi.intelligence.planner import Planner
-from kenpi.intelligence.tools import PolicyEngine, Tool, ToolRegistry
+from kenpi.intelligence.tools import PolicyEngine, Tool, ToolRegistry, cancelled
 from kenpi.media.library import LocalMediaLibrary
 from kenpi.voice.catalog import ModelCatalog
 from kenpi.voice.characters import (
@@ -103,6 +106,14 @@ class AssistantSettings:
             return cls()
 
 
+# Read-only SAE J1979 mode 01 PIDs that kenpi.vehicle.kline can decode.
+VEHICLE_QUANTITIES = {
+    "coolant_temperature": 0x05,
+    "engine_speed": 0x0C,
+    "vehicle_speed": 0x0D,
+}
+
+
 def _capability_evidence(capabilities: tuple[Any, ...]) -> dict[str, dict[str, str]]:
     return {
         c.name: {
@@ -125,11 +136,15 @@ class AssistantService:
         capabilities: tuple[Any, ...],
         coordinator: Callable[[], dict[str, Any]] | None = None,
         vehicle: Callable[[], dict[str, Any] | None] | None = None,
+        diagnose: Callable[..., Awaitable[dict[str, Any]]] | None = None,
         media_library: LocalMediaLibrary | None = None,
         settings: AssistantSettings | None = None,
     ) -> None:
         self._events = events
         self._data_dir = data_dir
+        self._vehicle = vehicle
+        self._diagnose = diagnose
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._log_ring = LogRing()
         self.log_store = LogStore()
         self._running = False
@@ -477,6 +492,62 @@ class AssistantService:
                 "count": len(files),
             }
 
+        def read_vehicle_data(args: dict[str, Any]) -> dict[str, Any]:
+            quantity = args["quantity"].strip().lower().replace(" ", "_")
+            pid = VEHICLE_QUANTITIES.get(quantity)
+            loop, diagnose = self._loop, self._diagnose
+            if pid is None:
+                known = ", ".join(q.replace("_", " ") for q in VEHICLE_QUANTITIES)
+                return {"message": f"I can read: {known}."}
+            if loop is None or diagnose is None:
+                raise RuntimeError("vehicle diagnostics are not available")
+            future = asyncio.run_coroutine_threadsafe(diagnose(0x01, pid, 3.0), loop)
+            deadline = time.monotonic() + 5.0
+            try:
+                while True:
+                    if cancelled():
+                        raise RuntimeError("cancelled")
+                    try:
+                        result = future.result(timeout=0.1)
+                        break
+                    except concurrent.futures.TimeoutError:
+                        if time.monotonic() >= deadline:
+                            raise
+            except BaseException:
+                future.cancel()
+                raise
+            decoded = result.get("decoded")
+            if result.get("status") != "ok" or not isinstance(decoded, dict):
+                return {
+                    "message": f"The vehicle did not return {quantity.replace('_', ' ')} "
+                    f"({result.get('status')}).",
+                    "result": result,
+                }
+            value = decoded["value"]
+            return {
+                "message": f"{quantity.replace('_', ' ').capitalize()} is "
+                f"{value:g} {decoded['unit']}, as reported by the vehicle controller.",
+                "result": result,
+            }
+
+        def vehicle_gate() -> str | None:
+            state = (self._vehicle() if self._vehicle else None) or {}
+            if self._diagnose is None or self._loop is None:
+                return "vehicle diagnostics are not configured"
+            if state.get("link_state") != "connected":
+                return "the vehicle controller is not connected"
+            return None
+
+        def vehicle_verify(result: dict[str, Any]) -> str | None:
+            inner = result.get("result")
+            if (
+                inner is not None
+                and inner.get("status") == "ok"
+                and "decoded" not in inner
+            ):
+                return "the response could not be decoded"
+            return None
+
         def show_camera_preview(_: dict[str, Any]) -> dict[str, Any]:
             return {"message": "Preview requested."}
 
@@ -556,6 +627,16 @@ class AssistantService:
                 {"camera": str, "day": str},
             ),
             Tool(
+                "read_vehicle_data",
+                "Read a live engine value from the vehicle (read-only)",
+                A,
+                read_vehicle_data,
+                {"quantity": str},
+                gate=vehicle_gate,
+                timeout=8.0,
+                verify=vehicle_verify,
+            ),
+            Tool(
                 "show_camera_preview",
                 "Show the live camera preview",
                 A,
@@ -601,6 +682,7 @@ class AssistantService:
 
     async def start(self) -> None:
         try:
+            self._loop = asyncio.get_running_loop()
             logging.getLogger().addHandler(self._log_ring)
             self._running = True
         except Exception:
@@ -608,9 +690,11 @@ class AssistantService:
 
     async def stop(self) -> None:
         try:
+            self.orchestrator.cancel_running()
             logging.getLogger().removeHandler(self._log_ring)
         finally:
             self._running = False
+            self._loop = None
 
     def route(
         self, path: str, query: dict[str, list[str]]
