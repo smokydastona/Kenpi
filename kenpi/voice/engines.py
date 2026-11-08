@@ -5,6 +5,8 @@ from __future__ import annotations
 import ipaddress
 import json
 import logging
+import re
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Protocol
@@ -126,6 +128,136 @@ class ChatterboxEngine(OpenVoiceEngine):
 
     id = "chatterbox"
     supports_cloning = True
+
+
+_GENERATION_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+class VoiceboxEngine:
+    """Client for a user-run Voicebox (MIT, jamiepine/voicebox) REST API.
+
+    Voicebox owns the voice profiles and models; Kenpi only sends text and the name or id of
+    an existing Voicebox profile (carried in `SynthesisRequest.base_speaker`). It never sends
+    reference audio, `personality` or `instruct`, so Kenpi's own character wording is what is
+    spoken. Flow: POST /generate -> poll GET /generate/{id}/status (SSE) -> GET /audio/{id}.
+    The API shapes come from Voicebox's source and are unvalidated against a running instance.
+    """
+
+    id = "voicebox"
+    supports_cloning = False
+
+    def __init__(
+        self,
+        url: str = "",
+        allow_remote: bool = False,
+        timeout: float = 60.0,
+        default_profile: str = "",
+    ) -> None:
+        self._url = url.rstrip("/")
+        self._timeout = timeout
+        self._default_profile = default_profile
+        self._opener = build_opener(ProxyHandler({}))
+        if url:
+            parsed = urlparse(url)
+            if parsed.scheme not in ("http", "https") or not parsed.hostname:
+                raise ValueError("Voicebox URL must be http(s)")
+            if not allow_remote and not _is_loopback(parsed.hostname):
+                raise ValueError("remote Voicebox hosts require allow_remote")
+
+    def availability(self) -> tuple[bool, str]:
+        if not self._url:
+            return False, "not configured"
+        try:
+            with self._opener.open(
+                f"{self._url}/health", timeout=min(self._timeout, 2.0)
+            ) as response:
+                json.loads(response.read(65536))
+                return True, "ready"
+        except (URLError, OSError, ValueError):
+            return False, "service unreachable"
+
+    def _get_json(self, path: str, timeout: float) -> Any:
+        with self._opener.open(f"{self._url}{path}", timeout=timeout) as response:
+            return json.loads(response.read(4 * 1024 * 1024))
+
+    def _resolve_profile(self, wanted: str) -> str:
+        profiles = self._get_json("/profiles", min(self._timeout, 5.0))
+        if isinstance(profiles, list):
+            for profile in profiles:
+                if not isinstance(profile, dict):
+                    continue
+                pid, name = profile.get("id"), profile.get("name")
+                if wanted == pid or (
+                    isinstance(name, str) and name.lower() == wanted.lower()
+                ):
+                    return str(pid)
+        raise EngineUnavailable("voicebox profile not found")
+
+    def _wait(self, generation_id: str, deadline: float) -> None:
+        request = Request(f"{self._url}/generate/{generation_id}/status")
+        with self._opener.open(request, timeout=min(self._timeout, 10.0)) as stream:
+            while time.monotonic() < deadline:
+                line = stream.readline(65536)
+                if not line:
+                    break
+                if not line.startswith(b"data:"):
+                    continue
+                status = json.loads(line[5:]).get("status")
+                if status == "completed":
+                    return
+                if status in ("failed", "not_found"):
+                    raise EngineUnavailable(f"voicebox generation {status}")
+        raise EngineUnavailable("voicebox generation timed out")
+
+    def synthesize(self, request: SynthesisRequest) -> bytes:
+        if not self._url:
+            raise EngineUnavailable("not configured")
+        wanted = request.base_speaker or self._default_profile
+        if not wanted:
+            raise EngineUnavailable("no voicebox profile selected")
+        deadline = time.monotonic() + self._timeout
+        generation_id = ""
+        try:
+            body = {
+                "profile_id": self._resolve_profile(wanted),
+                "text": request.text[:MAX_TEXT],
+                "language": request.language,
+            }
+            started = Request(
+                f"{self._url}/generate",
+                json.dumps(body).encode(),
+                {"Content-Type": "application/json"},
+            )
+            with self._opener.open(started, timeout=self._timeout) as response:
+                generation_id = str(json.loads(response.read(1024 * 1024)).get("id"))
+            if not _GENERATION_ID.match(generation_id):
+                raise EngineUnavailable("voicebox returned an invalid id")
+            self._wait(generation_id, deadline)
+            with self._opener.open(
+                f"{self._url}/audio/{generation_id}", timeout=self._timeout
+            ) as response:
+                return response.read(32 * 1024 * 1024)
+        except EngineUnavailable:
+            self._cancel(generation_id)
+            raise
+        except (URLError, OSError, ValueError) as error:
+            self._cancel(generation_id)
+            raise EngineUnavailable(
+                f"voicebox failed: {type(error).__name__}"
+            ) from error
+
+    def _cancel(self, generation_id: str) -> None:
+        if not _GENERATION_ID.match(generation_id):
+            return
+        try:
+            self._opener.open(
+                Request(
+                    f"{self._url}/generate/{generation_id}/cancel", b"", method="POST"
+                ),
+                timeout=2.0,
+            ).close()
+        except (URLError, OSError, ValueError):
+            pass
 
 
 class MeloEngine(OpenVoiceEngine):

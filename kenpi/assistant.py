@@ -13,7 +13,7 @@ import shutil
 import time
 import tomllib
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -45,6 +45,7 @@ from kenpi.voice.engines import (
     EngineRegistry,
     MeloEngine,
     OpenVoiceEngine,
+    VoiceboxEngine,
 )
 from kenpi.voice.profiles import (
     ProfileStore,
@@ -82,6 +83,12 @@ class AssistantSettings:
     openvoice_url: str = ""
     openvoice_allow_remote: bool = False
     chatterbox_url: str = ""
+    voicebox_url: str = ""
+    voicebox_allow_remote: bool = False
+    voicebox_default_profile: str = ""
+    # character id -> Voicebox profile name; needs voicebox_attestation (authorization to use them)
+    voicebox_profiles: dict[str, str] = field(default_factory=dict)
+    voicebox_attestation: str = ""
     llm_url: str = ""
     journal_units: tuple[str, ...] = ("kenpi-status.service",)
     llm_model: str = ""
@@ -169,11 +176,23 @@ class AssistantService:
                     "Invalid %s URL; engine left unconfigured", engine_class.id
                 )
                 engines.register(engine_class(""))
+        try:
+            engines.register(
+                VoiceboxEngine(
+                    settings.voicebox_url,
+                    settings.voicebox_allow_remote,
+                    default_profile=settings.voicebox_default_profile,
+                )
+            )
+        except ValueError:
+            logger.warning("Invalid Voicebox URL; engine left unconfigured")
+            engines.register(VoiceboxEngine(""))
         self.voice = VoiceService(
             engines,
             ProfileStore(data_dir / "voice" / "profiles.json" if data_dir else None),
             data_dir / "voice" if data_dir else None,
         )
+        self._map_voicebox_profiles(settings)
         self.catalog = ModelCatalog(models_dir)
         self.companion = CompanionRegistry()
         self.memory = PreferenceMemory(
@@ -228,6 +247,28 @@ class AssistantService:
             ),
         )
         self._voices: dict[str, CharacterVoice] = {}
+
+    def _map_voicebox_profiles(self, settings: AssistantSettings) -> None:
+        """Route characters to operator-named Voicebox profiles; MeloTTS stays the fallback."""
+        if not (settings.voicebox_url and settings.voicebox_profiles):
+            return
+        if not settings.voicebox_attestation.strip():
+            logger.warning(
+                "voicebox_profiles ignored: voicebox_attestation (authorization to use "
+                "these voices) is required"
+            )
+            return
+        for character_id, name in settings.voicebox_profiles.items():
+            try:
+                character = get_character(character_id)
+                base = self.voice.profiles.get(character_profile_id(character.id))
+                if base is None or base.speaker_embedding or not str(name).strip():
+                    continue
+                self.voice.profiles.add_runtime(
+                    replace(base, engine="voicebox", base_speaker=str(name)[:64])
+                )
+            except (ValueError, TypeError):
+                logger.warning("Invalid voicebox profile mapping for %s", character_id)
 
     @property
     def character(self) -> Character:

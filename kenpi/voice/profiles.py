@@ -109,6 +109,7 @@ class ProfileStore:
             **self._builtin,
         }
         self._active = DEFAULT_PROFILE.id
+        self._runtime: set[str] = set()  # config-derived overrides, never persisted
         if path is not None:
             self._load()
 
@@ -133,7 +134,9 @@ class ProfileStore:
             custom = [
                 asdict(p)
                 for p in self._profiles.values()
-                if p.id != DEFAULT_PROFILE.id and self._builtin.get(p.id) != p
+                if p.id != DEFAULT_PROFILE.id
+                and p.id not in self._runtime
+                and self._builtin.get(p.id) != p
             ]
             tmp.write_text(
                 json.dumps({"active": self._active, "profiles": custom}),
@@ -149,6 +152,11 @@ class ProfileStore:
             raise ValueError("the default profile cannot be replaced")
         self._profiles[profile.id] = profile
         self._save()
+
+    def add_runtime(self, profile: VoiceProfile) -> None:
+        """Override a profile from configuration for this run only (not written to disk)."""
+        self._profiles[profile.id] = profile
+        self._runtime.add(profile.id)
 
     def activate(self, profile_id: str) -> None:
         if profile_id not in self._profiles:

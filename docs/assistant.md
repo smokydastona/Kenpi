@@ -179,6 +179,22 @@ Honest status: the backend and client are **unvalidated against the real model**
 loads weights through the Hugging Face cache, so the catalog pin is for operator verification
 only, not enforcement. Full models are not assumed real-time on a Pi 5: use Turbo or a GPU host.
 
+### Voicebox (optional engine)
+
+[Voicebox](https://github.com/jamiepine/voicebox) (MIT) is a desktop voice studio with a local REST API. Kenpi can use it as an optional speech engine (id `voicebox`); it is not bundled and does not run on the Pi. Run it on a PC or GPU host and set in `assistant.toml`:
+
+```
+voicebox_url = "http://192.168.1.50:17493"
+voicebox_allow_remote = true            # required for non-loopback hosts
+voicebox_attestation = "I am authorized to use these voices"
+[voicebox_profiles]                      # character id -> Voicebox profile name or id
+southern_fixer = "Morgan"
+```
+
+Kenpi calls `POST /generate`, polls `GET /generate/{id}/status`, then `GET /audio/{id}`, sending only text, language and the resolved profile id. It never sends reference audio, `personality` or `instruct`, so Kenpi's own character wording is what is spoken. Mapped characters fall back to MeloTTS if Voicebox is unreachable. Mappings are ignored without `voicebox_attestation`, are not written to `profiles.json`, and voices cloned inside Voicebox are your responsibility to have consent for. Voicebox's models carry their own licences; Kenpi's MIT-only rule applies to any you choose. The API shapes were read from Voicebox's source and are **unvalidated against a running instance**.
+
+Ideas noted but not built: Voicebox's `pedalboard` effects presets (e.g. a radio filter), and Chatterbox Turbo paralinguistic tags (`[sigh]`) for the characters, which need a Turbo-specific text path.
+
 ## Companion phone: awareness and log exchange
 
 Pair a phone with the `assistant.use` scope (not granted by default):
