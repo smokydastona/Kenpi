@@ -313,3 +313,7 @@ Tools run in worker threads. Each gets a cancel event, observable from handlers 
 `kenpi.intelligence.tools.cancelled()`. The event is set when a tool times out and when
 the assistant service stops (`Orchestrator.cancel_running()`), so in-flight vehicle
 reads are cancelled instead of being abandoned.
+
+## Sarcasm
+
+Each of the four characters has dry, in-character asides (`SARCASM` in `kenpi/voice/characters.py`) mixed into greetings, diagnostic start/OK, approval requests, refusals, unknown requests and farewells. They are never used for faults or warnings, and the factual text is never altered. Disable with the `sarcasm` preference set to `off` (`AssistantService.set_sarcasm(False)`); the default is on.

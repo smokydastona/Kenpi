@@ -392,3 +392,45 @@ class PipelineServerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SarcasmTests(unittest.TestCase):
+    def test_every_character_has_sarcasm_for_each_kind(self):
+        from kenpi.voice.characters import SARCASM, SARCASM_KINDS
+
+        for c in CHARACTERS:
+            self.assertEqual(set(SARCASM[c.id]), set(SARCASM_KINDS), c.id)
+
+    def test_no_sarcasm_on_faults_or_warnings(self):
+        from kenpi.voice.characters import SARCASM_KINDS
+
+        self.assertNotIn("diagnostic_fault", SARCASM_KINDS)
+        self.assertNotIn("notify_warning", SARCASM_KINDS)
+
+    def test_sarcasm_used_and_facts_preserved(self):
+        for c in CHARACTERS:
+            voice = CharacterVoice(c)
+            seen = {voice.line("refusal") for _ in range(6)}
+            self.assertTrue(
+                seen
+                & set(
+                    __import__("kenpi.voice.characters", fromlist=["SARCASM"]).SARCASM[
+                        c.id
+                    ]["refusal"]
+                )
+            )
+            self.assertTrue(voice.render("refusal", "Fact.").endswith("Fact."))
+
+    def test_sarcasm_can_be_disabled(self):
+        from kenpi.voice.characters import SARCASM
+
+        for c in CHARACTERS:
+            voice = CharacterVoice(c, sarcasm=False)
+            lines = {voice.line("refusal") for _ in range(6)}
+            self.assertFalse(lines & set(SARCASM[c.id]["refusal"]))
+
+    def test_assistant_toggle(self):
+        assistant = make_assistant()
+        self.assertTrue(assistant.character_voice().sarcasm)
+        assistant.set_sarcasm(False)
+        self.assertFalse(assistant.character_voice().sarcasm)

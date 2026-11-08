@@ -20,6 +20,7 @@ ALLOWED_PREFERENCES = frozenset(
         "dashboard_screen",
         "response_style",
         "character",
+        "sarcasm",
     }
 )
 _VALUE = re.compile(r"^[\w.\- ]{1,64}$")

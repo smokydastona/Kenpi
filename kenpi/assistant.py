@@ -239,7 +239,12 @@ class AssistantService:
     def character_voice(self) -> CharacterVoice:
         """Cached per character so phrase rotation persists across turns."""
         character = self.character
-        return self._voices.setdefault(character.id, CharacterVoice(character))
+        voice = self._voices.setdefault(character.id, CharacterVoice(character))
+        voice.sarcasm = self.memory.get("sarcasm") != "off"
+        return voice
+
+    def set_sarcasm(self, enabled: bool) -> None:
+        self.memory.set("sarcasm", "on" if enabled else "off")
 
     def set_character(self, character_id: str) -> Character:
         character = get_character(character_id)

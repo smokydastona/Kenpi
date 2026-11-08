@@ -241,6 +241,60 @@ CHARACTERS: tuple[Character, ...] = (
 
 _BY_ID = {c.id: c for c in CHARACTERS}
 
+# Dry in-character asides. They tease the situation or the assistant, never the driver's
+# safety: no sarcasm on faults or warnings, and the factual text that follows is untouched.
+SARCASM_KINDS = (
+    "greeting",
+    "diagnostic_start",
+    "diagnostic_ok",
+    "needs_approval",
+    "refusal",
+    "unknown_request",
+    "farewell",
+)
+SARCASM: dict[str, dict[str, tuple[str, ...]]] = {
+    "brooklyn_gentleman": {
+        "greeting": ("Look who finally wants to talk to me.",),
+        "diagnostic_start": ("Sure, I'll look. It's not like I had plans.",),
+        "diagnostic_ok": ("Everything's fine. Try not to look so disappointed.",),
+        "needs_approval": ("You want me to do that on my own? What am I, a cowboy?",),
+        "refusal": ("Sure, why not ask me to fly the car while I'm at it.",),
+        "unknown_request": ("That's a sentence, I'll give you that.",),
+        "farewell": ("Go, go. I'll sit here by myself.",),
+    },
+    "english_professor": {
+        "greeting": ("How delightful. You remembered I exist.",),
+        "diagnostic_start": (
+            "I shall investigate, as I clearly have nothing better to do.",
+        ),
+        "diagnostic_ok": ("Nothing is wrong. Do try to contain your astonishment.",),
+        "needs_approval": (
+            "I shall wait for your permission, as any civilised machine would.",
+        ),
+        "refusal": ("What a bold request. No.",),
+        "unknown_request": ("That was in English, I assume?",),
+        "farewell": ("Do mind the road. It has been there for some time.",),
+    },
+    "southern_fixer": {
+        "greeting": ("Well look at that, you do know how to talk to me.",),
+        "diagnostic_start": ("Sure, I'll look. I was just sittin' here anyway.",),
+        "diagnostic_ok": ("Nothin' wrong. Bet that's a letdown.",),
+        "needs_approval": ("Not touchin' that till you say so. I ain't crazy.",),
+        "refusal": ("Bless your heart, no.",),
+        "unknown_request": ("Bless your heart, that made no sense to me.",),
+        "farewell": ("Drive safe. Or whatever it is you do.",),
+    },
+    "madame_colette": {
+        "greeting": ("Ah, you speak to me. What a surprise.",),
+        "diagnostic_start": ("Of course I will look. I only live to serve, darling.",),
+        "diagnostic_ok": ("Nothing is wrong. Such a shame, no drama.",),
+        "needs_approval": ("Without permission? Darling, I have standards.",),
+        "refusal": ("Non. You ask so charmingly for something so foolish.",),
+        "unknown_request": ("Darling, even I cannot translate that.",),
+        "farewell": ("Go, go. I will be here, doing nothing, as usual.",),
+    },
+}
+
 
 def get_character(character_id: str) -> Character:
     try:
@@ -263,12 +317,18 @@ def resolve_character(text: str) -> Character | None:
 class CharacterVoice:
     """Applies the active character's wording. Facts are never rewritten."""
 
-    def __init__(self, character: Character) -> None:
+    def __init__(self, character: Character, sarcasm: bool = True) -> None:
         self.character = character
+        self.sarcasm = sarcasm
         self._counts: dict[str, int] = {}
 
     def line(self, kind: str) -> str | None:
         options = self.character.phrases.get(kind)
+        if self.sarcasm and kind in SARCASM_KINDS:
+            options = (
+                *(options or ()),
+                *SARCASM.get(self.character.id, {}).get(kind, ()),
+            )
         if not options:
             return None
         count = self._counts.get(kind, 0)
