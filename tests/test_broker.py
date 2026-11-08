@@ -87,6 +87,28 @@ class BrokerTests(unittest.TestCase):
             broker.run("d", BOTH, op, {}, first["confirm_token"])
             self.assertEqual(runner.calls, [["systemctl", verb]])
 
+    def test_desktop_status_is_read_only_and_never_claims_streaming(self):
+        import socket
+
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+        try:
+            from kenpi.management.broker import probe_desktop
+
+            up = probe_desktop(port)
+        finally:
+            listener.close()
+        down = probe_desktop(port)
+        self.assertTrue(up["listening_on_loopback"])
+        self.assertFalse(down["listening_on_loopback"])
+        self.assertFalse(up["streaming_available"])
+        broker, _ = make()
+        broker.desktop_probe = lambda: {"ok": False}
+        done = broker.run("d", READ, "desktop_status", {})
+        self.assertEqual(done["result"], {"ok": False})
+
     def test_polkit_rule_matches_wired_units(self):
         root = Path(__file__).resolve().parents[1]
         rule = (root / "deploy/50-kenpi-broker.rules").read_text()

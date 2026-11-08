@@ -14,6 +14,8 @@ import json
 import os
 import re
 import secrets
+import shutil
+import socket
 import subprocess
 import time
 from collections.abc import Callable
@@ -51,6 +53,26 @@ def subprocess_runner(argv: list[str], timeout: float) -> tuple[int, str]:
     return done.returncode, (done.stdout + done.stderr).strip()[:2000]
 
 
+def probe_desktop(port: int = 5900, timeout: float = 1.0) -> dict[str, Any]:
+    """Connect-only check of a loopback VNC server; sends nothing and reads nothing.
+
+    Reports presence, not a working remote desktop: no stream or tunnel exists yet.
+    """
+    binary = shutil.which("wayvnc") or shutil.which("x11vnc")
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=timeout):
+            listening = True
+    except OSError:
+        listening = False
+    return {
+        "ok": listening,
+        "server_installed": binary is not None,
+        "listening_on_loopback": listening,
+        "port": port,
+        "streaming_available": False,
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class Operation:
     id: str
@@ -83,6 +105,7 @@ class Broker:
     runner: Runner = subprocess_runner
     proc_root: Path = Path("/proc")
     clock: Callable[[], float] = time.time
+    desktop_probe: Callable[[], dict[str, Any]] = field(default=lambda: probe_desktop())
     _ops: dict[str, Operation] = field(default_factory=dict)
     _pending: dict[str, _Pending] = field(default_factory=dict)
 
@@ -196,6 +219,9 @@ class Broker:
 
             return handler
 
+        def desktop_status(_: dict[str, Any]) -> dict[str, Any]:
+            return self.desktop_probe()
+
         def list_services(_: dict[str, Any]) -> dict[str, Any]:
             return {"units": sorted(self.allowed_units)}
 
@@ -227,6 +253,15 @@ class Broker:
                 "read",
                 processes,
                 no_args,
+            ),
+            Operation(
+                "desktop_status",
+                "Is a Pi desktop (VNC) server installed and listening on loopback",
+                "ops.read",
+                "read",
+                desktop_status,
+                no_args,
+                4.0,
             ),
             Operation(
                 "service_restart",

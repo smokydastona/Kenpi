@@ -1,5 +1,5 @@
 {
-  "commit": "b36c71c0838da7ee72fbf4de52efe212582f89ae",
+  "commit": "16b2403c1e17672c3aec45a4d21f7bce9baa550e",
   "entry_points": [
     "kenpi.assistant_cli",
     "kenpi.features",
@@ -8,13 +8,13 @@
     "kenpi.tools.backup",
     "kenpi.tools.devices"
   ],
-  "generated_at": "2026-11-08T02:32:17Z",
+  "generated_at": "2026-11-08T02:35:00Z",
   "justification_problems": {
     "invalid": [],
     "stale": [],
     "unjustified": []
   },
-  "module_count": 102,
+  "module_count": 103,
   "python": "3.12.3",
   "reachable_count": 77,
   "uncommitted_changes": true,
@@ -36,6 +36,7 @@
     "kenpi.tools.release",
     "kenpi.tools.report",
     "kenpi.tools.research_corpus",
+    "kenpi.tools.video_bench",
     "kenpi.ui",
     "kenpi.vehicle.kline_session",
     "kenpi.video",

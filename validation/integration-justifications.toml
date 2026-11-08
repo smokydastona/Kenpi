@@ -62,6 +62,9 @@ reason = "operator tool run with python -m; not imported by the service"
 [module."kenpi.tools.capture_summary"]
 reason = "operator tool run with python -m; not imported by the service"
 
+[module."kenpi.tools.video_bench"]
+reason = "operator benchmark run with python -m; not imported by the service"
+
 [module."kenpi.tools.redact"]
 reason = "operator tool run with python -m; not imported by the service"
 

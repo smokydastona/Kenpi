@@ -55,3 +55,14 @@ Nothing on this page is hardware-verified.
   **Opt-in**: copy it to `/etc/polkit-1/rules.d/` yourself. The installer does not do it, and the
   rule has not been tested against a real polkit daemon.
 - Still NOT BUILT: Pi Desktop, package/filesystem/config/network/GPIO operations, the premium UI.
+
+## Update: desktop status and video benchmarks
+
+- `desktop_status` (scope `ops.read`) does a connect-only check of a loopback VNC server
+  (port 5900) and looks for `wayvnc`/`x11vnc`. It always reports `streaming_available: false`.
+  **Pi Desktop itself is still not built**: no RFB stream, no authenticated tunnel, no Android
+  RFB client. The probe only tells the phone whether a server could be tunnelled later.
+- `python -m kenpi.tools.video_bench pipeline|decode` measures Kenpi's frame buffering and, if
+  ffmpeg is installed, software decode of a supplied file. The pipeline run is synthetic and
+  codec-free; neither mode is Gate 2 evidence. Run both on the Pi to get real numbers; the
+  figures from this development host are not Pi results and are not recorded.
