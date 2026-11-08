@@ -104,6 +104,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y wireguard-tools wireguard-go openssh-server iproute2
+          sudo install -d -m 0755 -o "$USER" /run/sshd
           python -m pip install '.[dev]' cryptography
       - name: Unload Ubuntu's wg and wg-quick AppArmor profiles
         # The profile denies reading configs outside /etc/wireguard; the test keeps them in a temp state dir.

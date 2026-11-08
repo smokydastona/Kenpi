@@ -15,7 +15,14 @@ import time
 from pathlib import Path
 
 SSHD = shutil.which("sshd") or "/usr/sbin/sshd"
-AVAILABLE = os.path.exists(SSHD) and shutil.which("ssh-keygen") and shutil.which("sftp")
+# sshd's privilege-separation directory must exist or be creatable; otherwise skip honestly.
+_PRIVSEP_OK = os.path.isdir("/run/sshd") or os.access("/run", os.W_OK)
+AVAILABLE = (
+    os.path.exists(SSHD)
+    and shutil.which("ssh-keygen")
+    and shutil.which("sftp")
+    and _PRIVSEP_OK
+)
 
 
 def _free_port() -> int:
