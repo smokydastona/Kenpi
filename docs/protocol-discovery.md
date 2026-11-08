@@ -70,6 +70,12 @@ record hardware/firmware per the template above, and run every exported log
 through `python -m kenpi.tools.redact` before sharing — these captures
 routinely contain session tokens, Wi-Fi credentials, and device identifiers.
 
+After redaction, `python -m kenpi.tools.capture_summary capture.har --model "A810 Lite"
+--firmware <version>` turns a HAR export into a table of observed endpoints (method, host:port,
+path, counts, statuses, content types, query keys). It refuses any input the redactor would still
+change, and its output is an unverified observation list, not a command definition. It has only
+been tested on synthetic fixtures, never on a real A810 Lite capture.
+
 ### APK review (static analysis of the official app)
 
 Decompiling a production APK you legally obtained (e.g. with `jadx` or
