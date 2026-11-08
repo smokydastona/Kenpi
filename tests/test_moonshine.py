@@ -100,3 +100,24 @@ class TTSTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SelectionTests(unittest.TestCase):
+    def test_modes(self):
+        import tempfile
+        from dataclasses import replace
+
+        from kenpi.assistant import AssistantSettings
+        from kenpi.assistant_cli import _select_transcriber
+        from kenpi.voice.audio import WhisperCppTranscriber
+
+        with tempfile.TemporaryDirectory() as d:
+            base = AssistantSettings(whisper_model=f"{d}/w.bin", whisper_binary="sh")
+            open(f"{d}/w.bin", "w").close()
+            self.assertIsInstance(_select_transcriber(base), WhisperCppTranscriber)
+            auto = replace(base, transcriber="auto")
+            self.assertIsInstance(_select_transcriber(auto), WhisperCppTranscriber)
+            with self.assertRaises(AudioUnavailable):
+                _select_transcriber(replace(base, transcriber="moonshine"))
+            with self.assertRaises(AudioUnavailable):
+                _select_transcriber(replace(auto, whisper_model=""))

@@ -84,7 +84,9 @@ class AssistantSettings:
     openvoice_url: str = ""
     openvoice_allow_remote: bool = False
     chatterbox_url: str = ""
-    transcriber: str = "whisper"  # or "moonshine"
+    transcriber: str = (
+        "whisper"  # "moonshine", or "auto" (Moonshine if usable, else whisper)
+    )
     moonshine_model_path: str = ""
     moonshine_arch: str = ""
     moonshine_tts: bool = False

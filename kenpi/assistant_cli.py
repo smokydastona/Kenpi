@@ -120,12 +120,35 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _select_transcriber(settings):
+    """`moonshine`, `whisper`, or `auto` (Moonshine when usable, else whisper.cpp)."""
+    from kenpi.voice.audio import AudioUnavailable, WhisperCppTranscriber
+    from kenpi.voice.moonshine import MoonshineTranscriber
+
+    choice = settings.transcriber
+    if choice in ("moonshine", "auto"):
+        moonshine = MoonshineTranscriber(
+            settings.moonshine_model_path, settings.moonshine_arch
+        )
+        if moonshine.available():
+            return moonshine
+        if choice == "moonshine":
+            raise AudioUnavailable(
+                "moonshine-voice or moonshine_model_path is not configured"
+            )
+    whisper = WhisperCppTranscriber(
+        settings.whisper_binary, Path(settings.whisper_model)
+    )
+    if not settings.whisper_model or not whisper.available():
+        raise AudioUnavailable("whisper.cpp binary or whisper_model is not configured")
+    return whisper
+
+
 def _listen(assistant: AssistantService, args: argparse.Namespace) -> int:
     from kenpi.assistant import AssistantSettings
     from kenpi.voice.audio import (
         AlsaCapture,
         AudioUnavailable,
-        WhisperCppTranscriber,
         discover_devices,
         play_wav,
         run_listener,
@@ -145,24 +168,7 @@ def _listen(assistant: AssistantService, args: argparse.Namespace) -> int:
         )
         if not device:
             raise AudioUnavailable("no capture device found")
-        if settings.transcriber == "moonshine":
-            from kenpi.voice.moonshine import MoonshineTranscriber
-
-            transcriber = MoonshineTranscriber(
-                settings.moonshine_model_path, settings.moonshine_arch
-            )
-            if not transcriber.available():
-                raise AudioUnavailable(
-                    "moonshine-voice or moonshine_model_path is not configured"
-                )
-        else:
-            transcriber = WhisperCppTranscriber(
-                settings.whisper_binary, Path(settings.whisper_model)
-            )
-            if not settings.whisper_model or not transcriber.available():
-                raise AudioUnavailable(
-                    "whisper.cpp binary or whisper_model is not configured"
-                )
+        transcriber = _select_transcriber(settings)
     except AudioUnavailable as error:
         print(
             f"Voice input unavailable (text-only still works): {error}", file=sys.stderr

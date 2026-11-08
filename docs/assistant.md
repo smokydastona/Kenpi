@@ -200,7 +200,7 @@ Ideas noted but not built: Voicebox's `pedalboard` effects presets (e.g. a radio
 [Moonshine Voice](https://github.com/moonshine-ai/moonshine) (MIT code; models MIT by default) runs on-device and lists Raspberry Pi as supported. Install it yourself (`pip install moonshine-voice`); it is not a Kenpi dependency.
 
 ```
-transcriber = "moonshine"                 # default "whisper"
+transcriber = "moonshine"                 # default "whisper"; "auto" = Moonshine if usable, else whisper.cpp
 moonshine_model_path = "/var/lib/kenpi/assistant/models/moonshine-en"
 moonshine_arch = ""                       # optional, passed through as model_arch
 moonshine_tts = true                      # registers the `moonshine_tts` engine
