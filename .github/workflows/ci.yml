@@ -107,7 +107,11 @@ jobs:
           python -m pip install '.[dev]' cryptography
       - name: Unload Ubuntu's wg and wg-quick AppArmor profiles
         # The profile denies reading configs outside /etc/wireguard; the test keeps them in a temp state dir.
-        run: sudo apparmor_parser -R /etc/apparmor.d/wg-quick /etc/apparmor.d/wg
+        # Runner images differ: unload only profiles that exist, so a missing one is not a failure.
+        run: |
+          for profile in /etc/apparmor.d/wg-quick /etc/apparmor.d/wg; do
+            if [ -f "$profile" ]; then sudo apparmor_parser -R "$profile"; fi
+          done
       - name: Real OpenSSH SFTP tests
         run: python -m unittest tests.test_sftp_live -v
       - name: Real WireGuard tunnel tests

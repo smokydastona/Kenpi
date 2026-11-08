@@ -21,7 +21,7 @@ jobs:
           java-version: "17"
       - name: Accept SDK licences (the runner image ships the Android SDK)
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
