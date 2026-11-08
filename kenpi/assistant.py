@@ -241,7 +241,11 @@ class AssistantService:
         character = self.character
         voice = self._voices.setdefault(character.id, CharacterVoice(character))
         voice.sarcasm = self.memory.get("sarcasm") != "off"
+        voice.swearing = self.memory.get("swearing") == "on"
         return voice
+
+    def set_swearing(self, enabled: bool) -> None:
+        self.memory.set("swearing", "on" if enabled else "off")
 
     def set_sarcasm(self, enabled: bool) -> None:
         self.memory.set("sarcasm", "on" if enabled else "off")

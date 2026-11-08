@@ -314,26 +314,81 @@ def resolve_character(text: str) -> Character | None:
     return None
 
 
+# Fixed per-character intensity (0-3): how often an aside replaces the plain line.
+# Deliberately not user-configurable; users only toggle each feature on or off.
+LEVELS: dict[str, tuple[int, int]] = {  # (sarcasm, swearing)
+    "brooklyn_gentleman": (2, 2),
+    "english_professor": (3, 1),
+    "southern_fixer": (2, 3),
+    "madame_colette": (2, 2),
+}
+# Never on warnings: a safety message must stay plain.
+SWEAR_KINDS = (*SARCASM_KINDS, "diagnostic_fault")
+SWEARING: dict[str, dict[str, tuple[str, ...]]] = {
+    "brooklyn_gentleman": {
+        "greeting": ("What the hell do you need now?",),
+        "diagnostic_ok": ("Everything's fine. Damn near perfect.",),
+        "diagnostic_fault": ("Son of a gun, we got a real pain in the ass here.",),
+        "refusal": ("Hell no, I'm not doing that.",),
+        "unknown_request": ("I don't know what the hell that means.",),
+    },
+    "english_professor": {
+        "greeting": ("Good day. What in blazes can I do for you?",),
+        "diagnostic_ok": ("Bloody marvellous, nothing is wrong.",),
+        "diagnostic_fault": ("Well, bugger. That is not ideal.",),
+        "refusal": ("Absolutely not, for heaven's bloody sake.",),
+        "unknown_request": ("I haven't the faintest bloody idea what you mean.",),
+    },
+    "southern_fixer": {
+        "greeting": ("Well hell, what're we fixin' now?",),
+        "diagnostic_start": ("Hell, let me crawl under there and look.",),
+        "diagnostic_ok": ("Runnin' damn fine, if you ask me.",),
+        "needs_approval": ("Damn right I'm askin' first.",),
+        "diagnostic_fault": ("Well shit, that ain't right. We'll fix it.",),
+        "refusal": ("Hell no, that's a damn fool idea.",),
+        "unknown_request": ("I ain't got a damn clue what you just said.",),
+        "farewell": ("Drive safe, dammit.",),
+    },
+    "madame_colette": {
+        "greeting": ("Merde, you again? Come, tell me.",),
+        "diagnostic_ok": ("Everything is fine. Pas de merde, darling.",),
+        "diagnostic_fault": ("Merde! Something is broken, darling.",),
+        "refusal": ("Non. Absolutely not, putain.",),
+        "unknown_request": ("What is this nonsense, darling? Merde.",),
+    },
+}
+
+
 class CharacterVoice:
     """Applies the active character's wording. Facts are never rewritten."""
 
-    def __init__(self, character: Character, sarcasm: bool = True) -> None:
+    def __init__(
+        self, character: Character, sarcasm: bool = True, swearing: bool = False
+    ) -> None:
         self.character = character
         self.sarcasm = sarcasm
+        self.swearing = swearing
         self._counts: dict[str, int] = {}
 
+    def _pool(self, kind: str, count: int) -> tuple[str, ...]:
+        sarcasm_level, swear_level = LEVELS.get(self.character.id, (0, 0))
+        if self.swearing and kind in SWEAR_KINDS and count % 3 < swear_level:
+            pool = SWEARING.get(self.character.id, {}).get(kind)
+            if pool:
+                return pool
+        if self.sarcasm and kind in SARCASM_KINDS and count % 3 < sarcasm_level:
+            pool = SARCASM.get(self.character.id, {}).get(kind)
+            if pool:
+                return pool
+        return self.character.phrases.get(kind, ())
+
     def line(self, kind: str) -> str | None:
-        options = self.character.phrases.get(kind)
-        if self.sarcasm and kind in SARCASM_KINDS:
-            options = (
-                *(options or ()),
-                *SARCASM.get(self.character.id, {}).get(kind, ()),
-            )
-        if not options:
-            return None
         count = self._counts.get(kind, 0)
         self._counts[kind] = count + 1
         if kind not in ALWAYS and count % 2 == 1:
+            return None
+        options = self._pool(kind, count)
+        if not options:
             return None
         return options[count // (1 if kind in ALWAYS else 2) % len(options)]
 

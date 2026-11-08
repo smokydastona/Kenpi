@@ -317,3 +317,7 @@ reads are cancelled instead of being abandoned.
 ## Sarcasm
 
 Each of the four characters has dry, in-character asides (`SARCASM` in `kenpi/voice/characters.py`) mixed into greetings, diagnostic start/OK, approval requests, refusals, unknown requests and farewells. They are never used for faults or warnings, and the factual text is never altered. Disable with the `sarcasm` preference set to `off` (`AssistantService.set_sarcasm(False)`); the default is on.
+
+Swearing is a second, separate toggle (`swearing` preference, `AssistantService.set_swearing`); it is **off by default**. When on, characters use mild-to-moderate profanity in the same situations plus diagnostic faults, never on warnings. User profanity is simply ignored by the planner: it never causes a refusal or changes which tool runs.
+
+Each character has fixed sarcasm and swearing levels (0-3, `LEVELS`: how often an aside replaces the plain line). They are not preferences, so users and the assistant cannot change them.

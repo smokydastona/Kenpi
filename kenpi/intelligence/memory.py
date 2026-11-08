@@ -21,6 +21,7 @@ ALLOWED_PREFERENCES = frozenset(
         "response_style",
         "character",
         "sarcasm",
+        "swearing",
     }
 )
 _VALUE = re.compile(r"^[\w.\- ]{1,64}$")

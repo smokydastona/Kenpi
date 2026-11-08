@@ -434,3 +434,65 @@ class SarcasmTests(unittest.TestCase):
         self.assertTrue(assistant.character_voice().sarcasm)
         assistant.set_sarcasm(False)
         self.assertFalse(assistant.character_voice().sarcasm)
+
+
+class SwearingTests(unittest.TestCase):
+    def test_every_character_has_levels_and_lines(self):
+        from kenpi.voice.characters import LEVELS, SWEARING, SWEAR_KINDS
+
+        for c in CHARACTERS:
+            self.assertIn(c.id, LEVELS)
+            self.assertTrue(all(0 <= v <= 3 for v in LEVELS[c.id]))
+            self.assertTrue(SWEARING[c.id])
+            self.assertTrue(set(SWEARING[c.id]) <= set(SWEAR_KINDS))
+
+    def test_levels_differ_between_characters(self):
+        from kenpi.voice.characters import LEVELS
+
+        self.assertGreater(len({v for v in LEVELS.values()}), 1)
+
+    def test_swearing_off_by_default_and_never_on_warnings(self):
+        from kenpi.voice.characters import SWEARING
+
+        for c in CHARACTERS:
+            off = CharacterVoice(c)
+            self.assertFalse(off.swearing)
+            lines = {off.line("diagnostic_fault") for _ in range(6)}
+            self.assertFalse(lines & set(SWEARING[c.id].get("diagnostic_fault", ())))
+            self.assertNotIn("notify_warning", SWEARING[c.id])
+
+    def test_swearing_appears_when_on_and_facts_preserved(self):
+        from kenpi.voice.characters import SWEARING
+
+        for c in CHARACTERS:
+            voice = CharacterVoice(c, sarcasm=False, swearing=True)
+            seen = {voice.line("refusal") for _ in range(6)}
+            self.assertTrue(seen & set(SWEARING[c.id]["refusal"]), c.id)
+            self.assertTrue(voice.render("refusal", "Fact.").endswith("Fact."))
+
+    def test_user_cannot_change_levels(self):
+        from kenpi.intelligence.memory import PreferenceMemory
+
+        memory = PreferenceMemory()
+        for key in ("sarcasm_level", "swearing_level", "levels"):
+            with self.assertRaises(ValueError):
+                memory.set(key, "3")
+
+    def test_assistant_swearing_toggle_persists(self):
+        assistant = make_assistant()
+        self.assertFalse(assistant.character_voice().swearing)
+        assistant.set_swearing(True)
+        self.assertTrue(assistant.character_voice().swearing)
+        assistant.set_swearing(False)
+        self.assertFalse(assistant.character_voice().swearing)
+
+    def test_user_profanity_does_not_change_the_plan(self):
+        assistant = make_assistant()
+        clean = assistant.orchestrator.handle("is the camera recording", "s1")
+        rude = assistant.orchestrator.handle(
+            "is the camera fucking recording, dammit", "s2"
+        )
+        self.assertTrue(clean.outcomes)
+        self.assertEqual(
+            [o.tool for o in clean.outcomes], [o.tool for o in rude.outcomes]
+        )
