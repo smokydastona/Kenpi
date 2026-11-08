@@ -73,6 +73,12 @@ def problems(entries: list[dict], root: Path = ROOT) -> list[str]:
         for test in entry["tests"]:
             if not (root / test).is_file():
                 found.append(f"{name}: missing test file {test}")
+        if (
+            entry["implementation"] == "complete"
+            and entry["hardware"]
+            and level < EvidenceLevel.E4
+        ):
+            found.append(f"{name}: complete hardware capability needs E4+ evidence")
         if level >= EvidenceLevel.E4:
             ref = entry.get("evidence_ref")
             if not isinstance(ref, str) or not _inside(root, ref):

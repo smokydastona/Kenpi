@@ -28,6 +28,10 @@ jobs:
         run: python -m compileall -q kenpi tests
       - name: Unit tests
         run: python -m unittest discover -v
+      - name: Capability register is consistent with the runtime
+        run: python -m kenpi.tools.register
+      - name: Disconnected modules are justified; no copyleft dependencies
+        run: python -m kenpi.tools.audit --strict --output "$RUNNER_TEMP/audit"
       - name: Build wheel
         run: python -m pip wheel --no-deps --wheel-dir /tmp/kenpi-wheels .
 

@@ -1,0 +1,75 @@
+# Why each module is not reachable from a pyproject entry point.
+# Checked by `python -m kenpi.tools.audit --strict`.
+# `blocked:<capability_id> reason` is valid only while that capability is not complete.
+
+[module."kenpi.camera"]
+reason = "blocked:camera_control Package for the unverified A810 Lite adapter; no transport exists"
+
+[module."kenpi.camera.adapter"]
+reason = "blocked:camera_control No A810 Lite protocol evidence; adapter contract only"
+
+[module."kenpi.camera.commands"]
+reason = "blocked:camera_control Command table has no verified commands"
+
+[module."kenpi.camera.control"]
+reason = "blocked:camera_control Needs a verified adapter before it can be composed"
+
+[module."kenpi.camera.lifecycle"]
+reason = "blocked:camera_control Records caller-reported phases; no device to report them"
+
+[module."kenpi.camera.session"]
+reason = "blocked:camera_control Session/auth procedure unknown"
+
+[module."kenpi.kenwood"]
+reason = "blocked:kenwood_touchscreen Display/touch path unverified on DMX5710S"
+
+[module."kenpi.kenwood.adapter"]
+reason = "blocked:kenwood_touchscreen Touch return path unverified"
+
+[module."kenpi.ui"]
+reason = "blocked:kenwood_touchscreen UI shell awaits the verified display path"
+
+[module."kenpi.video"]
+reason = "blocked:live_preview No verified camera stream source"
+
+[module."kenpi.video.buffer"]
+reason = "blocked:live_preview Buffer is exercised by tests only until a stream exists"
+
+[module."kenpi.video.pipeline"]
+reason = "blocked:live_preview No verified camera stream source"
+
+[module."kenpi.vehicle.kline_session"]
+reason = "blocked:vehicle_power_coordination Simulated-ECU only; no verified vehicle interface"
+
+[module."kenpi.voice.chatterbox_backend"]
+reason = "isolated inference process: launched by the GPU-host pipeline server, never imported by the gateway"
+
+[module."kenpi.voice.openvoice_backend"]
+reason = "isolated inference process: launched by the GPU-host pipeline server, never imported by the gateway"
+
+[module."kenpi.voice.pipeline_server"]
+reason = "isolated inference process: run on a separate inference host"
+
+[module."kenpi.tools.audit"]
+reason = "operator tool run with python -m; not imported by the service"
+
+[module."kenpi.tools.gps_log"]
+reason = "operator tool run with python -m; not imported by the service"
+
+[module."kenpi.tools.profiler"]
+reason = "operator tool run with python -m; not imported by the service"
+
+[module."kenpi.tools.redact"]
+reason = "operator tool run with python -m; not imported by the service"
+
+[module."kenpi.tools.register"]
+reason = "operator tool run with python -m; not imported by the service"
+
+[module."kenpi.tools.release"]
+reason = "operator tool run with python -m; not imported by the service"
+
+[module."kenpi.tools.report"]
+reason = "operator tool run with python -m; not imported by the service"
+
+[module."kenpi.tools.research_corpus"]
+reason = "operator tool run with python -m; not imported by the service"

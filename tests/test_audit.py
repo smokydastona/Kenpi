@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from kenpi.tools import audit
@@ -38,6 +39,25 @@ class AuditTests(unittest.TestCase):
             for name in ("integration-report.json", "dependency-licences.json"):
                 data = json.loads((Path(d) / name).read_text())
                 self.assertIn("commit", data)
+
+    def test_repository_has_no_unjustified_modules(self):
+        issues = audit.integration_report()["justification_problems"]
+        self.assertEqual(issues, {"unjustified": [], "stale": [], "invalid": []})
+
+    def test_justification_rules(self):
+        found = audit.justification_problems(
+            ["a", "b", "c"],
+            {"a": "ok", "b": "blocked:camera_control x", "gone": "old"},
+            {"camera_control"},
+        )
+        self.assertEqual(found["unjustified"], ["c"])
+        self.assertEqual(found["stale"], ["gone"])
+        self.assertEqual(len(found["invalid"]), 1)
+
+    def test_strict_fails_on_unjustified(self):
+        with tempfile.TemporaryDirectory() as d:
+            with mock.patch.object(audit, "load_justifications", return_value={}):
+                self.assertEqual(audit.main(["--output", d, "--strict"]), 1)
 
 
 if __name__ == "__main__":

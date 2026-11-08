@@ -79,6 +79,12 @@ class RegisterTests(unittest.TestCase):
         found = register.problems([self.entry(id="camera_control", hardware=True)])
         self.assertTrue(any("not AVAILABLE" in p for p in found))
 
+    def test_complete_hardware_needs_e4(self):
+        found = register.problems(
+            [self.entry(id="camera_control", hardware=True, implementation="complete")]
+        )
+        self.assertTrue(any("needs E4+" in p for p in found))
+
 
 if __name__ == "__main__":
     unittest.main()

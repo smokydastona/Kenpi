@@ -69,6 +69,37 @@ def entry_points() -> list[str]:
     return sorted({target.split(":")[0] for target in scripts.values()})
 
 
+JUSTIFICATIONS = ROOT / "validation" / "integration-justifications.toml"
+
+
+def load_justifications(path: Path = JUSTIFICATIONS) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    return {m: str(v.get("reason", "")) for m, v in data.get("module", {}).items()}
+
+
+def justification_problems(
+    unreachable: list[str],
+    justifications: dict[str, str],
+    complete: set[str],
+) -> dict[str, list[str]]:
+    """A disconnected module must say why. `blocked:<capability>` is only honest while
+    that capability is not complete; once it is, the module must be wired in."""
+    unjustified = [m for m in unreachable if not justifications.get(m, "").strip()]
+    stale = sorted(m for m in justifications if m not in unreachable)
+    invalid = []
+    for module in unreachable:
+        reason = justifications.get(module, "")
+        if reason.startswith("blocked:"):
+            capability = reason.split(":", 1)[1].split()[0]
+            if capability in complete:
+                invalid.append(
+                    f"{module}: capability {capability} is complete; wire it in"
+                )
+    return {"unjustified": unjustified, "stale": stale, "invalid": invalid}
+
+
 def integration_report() -> dict:
     files = {
         _module_name(p): p
@@ -93,8 +124,13 @@ def integration_report() -> dict:
     unreachable = sorted(
         n for n in known - reached if not n.endswith("__main__") and n != "kenpi"
     )
+    justifications = load_justifications()
+    complete = {e["id"] for e in register.load() if e["implementation"] == "complete"}
     return {
         **provenance(),
+        "justification_problems": justification_problems(
+            unreachable, justifications, complete
+        ),
         "entry_points": roots,
         "module_count": len(known),
         "reachable_count": len(reached),
@@ -216,7 +252,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--output", type=Path, default=ROOT / "validation")
     parser.add_argument(
-        "--strict", action="store_true", help="exit 1 on copyleft Python dependencies"
+        "--strict",
+        action="store_true",
+        help="exit 1 on copyleft dependencies or unjustified disconnected modules",
     )
     args = parser.parse_args(argv)
     args.output.mkdir(parents=True, exist_ok=True)
@@ -228,7 +266,12 @@ def main(argv: list[str] | None = None) -> int:
         f"dependencies needing review: {len(dependencies['needs_review'])}"
     )
     copyleft = [d for d in dependencies["python"] if d["verdict"] == "copyleft_review"]
-    return 1 if args.strict and copyleft else 0
+    issues = integration["justification_problems"]
+    bad = any(issues.values())
+    for kind, items in issues.items():
+        for item in items:
+            print(f"{kind}: {item}")
+    return 1 if args.strict and (copyleft or bad) else 0
 
 
 if __name__ == "__main__":
