@@ -52,6 +52,37 @@ def read_throttled(
         return None
 
 
+def read_board(proc_root: Path, sys_root: Path) -> dict[str, Any]:
+    """Board model, firmware-reported PSU limit and fan presence; None when not readable.
+
+    `chosen/power/max_current` is read as a big-endian u32 in mA. That unit is taken from
+    Raspberry Pi firmware documentation and has not been confirmed on this project's Pi.
+    """
+    model = None
+    try:
+        raw = (proc_root / "device-tree/model").read_bytes()
+        model = raw.split(b"\0", 1)[0].decode("ascii", "replace").strip() or None
+    except OSError:
+        pass
+    psu = None
+    try:
+        data = (proc_root / "device-tree/chosen/power/max_current").read_bytes()
+        if len(data) == 4:
+            psu = int.from_bytes(data, "big") or None
+    except OSError:
+        pass
+    fan: bool | None = None
+    try:
+        kinds = [
+            _read(p / "type")
+            for p in (sys_root / "class/thermal").glob("cooling_device*")
+        ]
+        fan = any(k == "pwm-fan" for k in kinds)
+    except OSError:
+        pass
+    return {"model": model, "psu_max_current_ma": psu, "fan_present": fan}
+
+
 REAL_FILESYSTEMS = {"ext4", "ext3", "ext2", "vfat", "f2fs", "xfs", "btrfs", "exfat"}
 
 
@@ -85,6 +116,7 @@ def collect_system(
         "throttled_flags": None,
         "usb_devices": None,
         "usb_details": None,
+        "board": read_board(proc_root, sys_root),
     }
     load = _read(proc_root / "loadavg")
     if load:

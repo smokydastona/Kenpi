@@ -335,3 +335,65 @@ class UsbTests(unittest.TestCase):
             [CheckResult(Subsystem.HOST, "usb", Status.WARN, "x", {})], None
         )
         self.assertEqual([f.id for f in faults], ["host.usb_unbound"])
+
+
+class BoardTests(unittest.TestCase):
+    def tree(self, root: Path, model: str | None, psu: int | None, fan: bool) -> None:
+        dt = root / "proc/device-tree"
+        (dt / "chosen/power").mkdir(parents=True)
+        if model:
+            (dt / "model").write_bytes(model.encode() + b"\0")
+        if psu is not None:
+            (dt / "chosen/power/max_current").write_bytes(psu.to_bytes(4, "big"))
+        cool = root / "sys/class/thermal/cooling_device0"
+        cool.mkdir(parents=True)
+        (cool / "type").write_text("pwm-fan" if fan else "processor")
+
+    def check(self, board):
+        ctx = DiagnosticContext(host_health=lambda: {}, system=lambda: {"board": board})
+        return {r.name: r for r in check_system(ctx)}["board_power"]
+
+    def test_reads_model_psu_and_fan(self):
+        from kenpi.diagnostics.system import read_board
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            self.tree(root, "Raspberry Pi 5 Model B Rev 1.0", 3000, True)
+            board = read_board(root / "proc", root / "sys")
+            self.assertEqual(board["model"], "Raspberry Pi 5 Model B Rev 1.0")
+            self.assertEqual(
+                (board["psu_max_current_ma"], board["fan_present"]), (3000, True)
+            )
+
+    def test_weak_supply_warns_and_maps_to_fault(self):
+        from kenpi.diagnostics.faults import detect_faults
+
+        result = self.check(
+            {
+                "model": "Raspberry Pi 5 Model B",
+                "psu_max_current_ma": 3000,
+                "fan_present": False,
+            }
+        )
+        self.assertEqual(result.status, Status.WARN)
+        self.assertIn("3000 mA", result.detail)
+        self.assertEqual(
+            [f.id for f in detect_faults([result], None)], ["host.psu_limited"]
+        )
+
+    def test_full_supply_ok_and_missing_evidence_unknown(self):
+        ok = self.check(
+            {
+                "model": "Raspberry Pi 5 Model B",
+                "psu_max_current_ma": 5000,
+                "fan_present": True,
+            }
+        )
+        self.assertEqual(ok.status, Status.OK)
+        self.assertEqual(self.check({}).status, Status.UNKNOWN)
+        self.assertEqual(
+            self.check({"model": "Some Other Board"}).status, Status.UNKNOWN
+        )
+        reported = self.check({"model": "Raspberry Pi 5 Model B"})
+        self.assertEqual(reported.status, Status.OK)
+        self.assertIn("not reported", reported.detail)

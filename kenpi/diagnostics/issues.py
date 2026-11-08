@@ -186,6 +186,23 @@ _ISSUES = (
         ("read-only", "readonly", "sd card", "corrupt", "i/o error"),
     ),
     KnownIssue(
+        "host.psu_limited",
+        "Power supply below Raspberry Pi 5 rating",
+        "The firmware reports the supply's advertised current. Below 5 A the Pi 5 limits USB power, "
+        "which matters for a microphone, camera link and storage on the same board. "
+        "This is the supply's advertisement, not a measurement of what the load draws.",
+        (
+            Step("Use a 5 V/5 A USB-C power supply that negotiates 5 A."),
+            Step(
+                "In a vehicle, check the converter's rating and wiring, not only the cable."
+            ),
+            Step(
+                "Re-run diagnostics; also check for under-voltage in the throttling result."
+            ),
+        ),
+        ("power supply", "psu", "5a", "usb power", "brownout"),
+    ),
+    KnownIssue(
         "host.usb_unbound",
         "USB device without a driver",
         "A USB device enumerated but the kernel bound no driver to at least one interface. "

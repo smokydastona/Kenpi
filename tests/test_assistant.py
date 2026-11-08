@@ -170,6 +170,11 @@ class DiagnosticsTests(unittest.TestCase):
             "throttled_flags": 0,
             "usb_devices": [],
             "readonly_mounts": [],
+            "board": {
+                "model": "Raspberry Pi 5 Model B",
+                "psu_max_current_ma": 5000,
+                "fan_present": True,
+            },
         }
         with unittest.mock.patch("kenpi.assistant.collect_system", lambda: healthy):
             report = make_assistant().diagnostics.run()

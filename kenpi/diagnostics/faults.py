@@ -56,6 +56,12 @@ def detect_faults(results: list[CheckResult], logs: LogAnalysis | None) -> list[
     )
     from_check(
         Subsystem.HOST,
+        "board_power",
+        "host.psu_limited",
+        "The power supply advertises less current than a Raspberry Pi 5 expects",
+    )
+    from_check(
+        Subsystem.HOST,
         "usb",
         "host.usb_unbound",
         "A USB device is connected but no driver is bound to it",

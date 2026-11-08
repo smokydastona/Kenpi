@@ -461,6 +461,48 @@ def check_system(context: DiagnosticContext) -> list[CheckResult]:
                 {"flags": hex(flags)},
             )
         )
+    board = data.get("board") or {}
+    model = board.get("model")
+    if not model or "Raspberry Pi" not in model:
+        results.append(
+            _unknown(Subsystem.HOST, "board_power", "Raspberry Pi model not readable")
+        )
+    else:
+        psu = board.get("psu_max_current_ma")
+        fan = board.get("fan_present")
+        fan_text = (
+            "no fan reported"
+            if fan is False
+            else "fan reported"
+            if fan
+            else "fan unknown"
+        )
+        evidence = {"model": model, "psu_max_current_ma": psu, "fan_present": fan}
+        if "Raspberry Pi 5" in model and psu is not None and psu < 5000:
+            results.append(
+                CheckResult(
+                    Subsystem.HOST,
+                    "board_power",
+                    Status.WARN,
+                    f"{model}: supply advertises {psu} mA; a Pi 5 expects 5000 mA (5 V/5 A) for full speed and USB peripherals; {fan_text}",
+                    evidence,
+                )
+            )
+        else:
+            known = (
+                f"supply advertises {psu} mA"
+                if psu is not None
+                else "supply limit not reported"
+            )
+            results.append(
+                CheckResult(
+                    Subsystem.HOST,
+                    "board_power",
+                    Status.OK,
+                    f"{model}: {known}; {fan_text}",
+                    evidence,
+                )
+            )
     ro = data.get("readonly_mounts")
     if ro is None:
         results.append(_unknown(Subsystem.HOST, "filesystem", "mount table unreadable"))
